@@ -1,14 +1,16 @@
 import { motion } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  HeartPulse, 
-  Wheat, 
-  LineChart, 
+import {
+  LayoutDashboard,
+  Building2,
+  HeartPulse,
+  Wheat,
+  LineChart,
   Settings,
   ChevronLeft,
   ChevronRight,
-  Zap
+  Zap,
+  Cloudy,
+  Map
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -20,6 +22,8 @@ interface SidebarProps {
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'weather', label: 'Live Weather', icon: Cloudy },
+  { id: 'areas', label: 'Manage Areas', icon: Map },
   { id: 'urban', label: 'Urban Metrics', icon: Building2 },
   { id: 'health', label: 'Public Health', icon: HeartPulse },
   { id: 'agriculture', label: 'Agriculture', icon: Wheat },

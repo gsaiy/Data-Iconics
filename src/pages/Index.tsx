@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Car, 
-  Wind, 
-  Zap as ZapIcon, 
-  Volume2, 
+import {
+  Car,
+  Wind,
+  Zap as ZapIcon,
+  Volume2,
   Train,
   HeartPulse,
   Building2,
@@ -17,7 +17,8 @@ import {
   Droplets,
   Leaf,
   Wifi,
-  WifiOff
+  WifiOff,
+  Map as MapIcon
 } from 'lucide-react';
 
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -28,24 +29,62 @@ import { ScenarioPanel } from '@/components/dashboard/ScenarioPanel';
 import { DataChart } from '@/components/dashboard/DataChart';
 import { RiskHeatmap } from '@/components/dashboard/RiskHeatmap';
 import { CityMap } from '@/components/dashboard/CityMap';
+import WeatherView from '@/components/dashboard/WeatherView';
+import ManageAreas from '@/components/dashboard/ManageAreas';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 
 const Index = () => {
-  const [activeSection, setActiveSection] = useState('overview');
-  const { data, scenario, updateScenario, resetScenario, refreshData } = useRealTimeData(30000);
+  const [activeSection, setActiveSection] = useState(() => {
+    return localStorage.getItem('urbanexus_active_section') || 'overview';
+  });
+
+  const [location, setLocation] = useState(() => {
+    const saved = localStorage.getItem('urbanexus_current_location');
+    return saved ? JSON.parse(saved) : {
+      lat: 28.6139,
+      lon: 77.2090,
+      name: 'Delhi NCR'
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('urbanexus_active_section', activeSection);
+  }, [activeSection]);
+
+  useEffect(() => {
+    localStorage.setItem('urbanexus_current_location', JSON.stringify(location));
+  }, [location]);
+
+  const { data, scenario, updateScenario, resetScenario, refreshData } = useRealTimeData(location.lat, location.lon, 10000);
+
+  useEffect(() => {
+    // Only attempt geolocation if no location is saved
+    const saved = localStorage.getItem('urbanexus_current_location');
+    if (!saved && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        setLocation({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+          name: 'Current Location'
+        });
+      });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
       <Sidebar activeSection={activeSection} onSectionChange={setActiveSection} />
-      
+
       <main className="pl-64 transition-all duration-300">
-        <Header 
-          lastUpdated={data.lastUpdated} 
-          onRefresh={refreshData} 
+        <Header
+          lastUpdated={data.lastUpdated}
+          onRefresh={refreshData}
           isLoading={data.isLoading}
+          locationName={location.name}
         />
-        
+
         <div className="p-6">
           <motion.div
             initial={{ opacity: 0 }}
@@ -57,6 +96,8 @@ const Index = () => {
             <div className="mb-8">
               <h2 className="text-2xl font-bold gradient-text inline-block">
                 {activeSection === 'overview' && 'Dashboard Overview'}
+                {activeSection === 'weather' && 'Live Weather Dashboard'}
+                {activeSection === 'areas' && 'Manage Monitoring Areas'}
                 {activeSection === 'urban' && 'Urban Infrastructure'}
                 {activeSection === 'health' && 'Public Health Indicators'}
                 {activeSection === 'agriculture' && 'Agricultural Supply'}
@@ -65,6 +106,8 @@ const Index = () => {
               </h2>
               <p className="text-muted-foreground mt-1">
                 {activeSection === 'overview' && 'Comprehensive view of city performance metrics'}
+                {activeSection === 'weather' && 'Detailed meteorological data and forecasts'}
+                {activeSection === 'areas' && 'Add and switch between different cities or regions'}
                 {activeSection === 'urban' && 'Traffic, energy, air quality and infrastructure data'}
                 {activeSection === 'health' && 'Disease incidence, hospital capacity, and emergency metrics'}
                 {activeSection === 'agriculture' && 'Crop yield, food supply, and price trends'}
@@ -72,6 +115,18 @@ const Index = () => {
                 {activeSection === 'scenarios' && 'What-if analysis and impact projections'}
               </p>
             </div>
+
+            {/* Manage Areas Section */}
+            {activeSection === 'areas' && (
+              <ManageAreas
+                currentLocation={location}
+                onLocationSelect={(loc) => {
+                  setLocation(loc);
+                  setActiveSection('overview'); // Go back to overview when location changes
+                  toast.success(`Switched to ${loc.name}`);
+                }}
+              />
+            )}
 
             {/* Overview Section */}
             {activeSection === 'overview' && (
@@ -82,10 +137,10 @@ const Index = () => {
                     <CityHealthGauge data={data.cityHealth} />
                   </div>
                   <div>
-                    <ScenarioPanel 
-                      scenario={scenario} 
-                      onUpdate={updateScenario} 
-                      onReset={resetScenario} 
+                    <ScenarioPanel
+                      scenario={scenario}
+                      onUpdate={updateScenario}
+                      onReset={resetScenario}
                     />
                   </div>
                 </div>
@@ -156,7 +211,10 @@ const Index = () => {
                 </div>
 
                 {/* Interactive City Map */}
-                <CityMap 
+                <CityMap
+                  lat={location.lat}
+                  lon={location.lon}
+                  onLocationChange={(lat, lon) => setLocation({ lat, lon, name: 'Selected Location' })}
                   airQuality={data.airQuality}
                   trafficCongestion={data.urban.trafficCongestion}
                 />
@@ -168,6 +226,11 @@ const Index = () => {
                   subtitle="District-wise risk levels over time"
                 />
               </>
+            )}
+
+            {/* Weather Section */}
+            {activeSection === 'weather' && (
+              <WeatherView data={data} locationName={location.name} />
             )}
 
             {/* Urban Section */}
@@ -371,10 +434,10 @@ const Index = () => {
             {/* Scenarios Section */}
             {activeSection === 'scenarios' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <ScenarioPanel 
-                  scenario={scenario} 
-                  onUpdate={updateScenario} 
-                  onReset={resetScenario} 
+                <ScenarioPanel
+                  scenario={scenario}
+                  onUpdate={updateScenario}
+                  onReset={resetScenario}
                 />
                 <CityHealthGauge data={data.cityHealth} />
                 <DataChart

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { RefreshCw, Bell, Clock, Wifi, WifiOff } from 'lucide-react';
+import { RefreshCw, Bell, Clock, Wifi, WifiOff, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
@@ -8,9 +8,10 @@ interface HeaderProps {
   lastUpdated: Date;
   onRefresh: () => void;
   isLoading: boolean;
+  locationName: string;
 }
 
-export const Header = ({ lastUpdated, onRefresh, isLoading }: HeaderProps) => {
+export const Header = ({ lastUpdated, onRefresh, isLoading, locationName }: HeaderProps) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isConnected, setIsConnected] = useState(true);
 
@@ -31,8 +32,11 @@ export const Header = ({ lastUpdated, onRefresh, isLoading }: HeaderProps) => {
     <header className="h-16 flex items-center justify-between px-6 border-b border-border bg-background/50 backdrop-blur-xl sticky top-0 z-40">
       <div className="flex items-center gap-6">
         <div>
-          <h1 className="text-xl font-semibold">Smart City Intelligence</h1>
-          <p className="text-xs text-muted-foreground">Real-time urban analytics platform</p>
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary" />
+            {locationName}
+          </h1>
+          <p className="text-xs text-muted-foreground">Smart City Intelligence • Real-time Monitoring</p>
         </div>
       </div>
 

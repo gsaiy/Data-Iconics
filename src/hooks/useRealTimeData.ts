@@ -15,109 +15,12 @@ import {
   type ScenarioParams,
 } from '@/lib/dataSimulation';
 
-// API Configuration
-const TOMTOM_API_KEY = 'Cf2GFlBhr2Mm3tze2t8e5yMtxJJH1Saj';
-const OPENAQ_API_KEY = 'c415a63db2mshf2b3af35a139cc6p16ec37jsnaab9021270ce';
+import { fetchTrafficData } from '@/services/trafficService';
+import { fetchWeatherAndAQI, fetchForecast, type ForecastData } from '@/services/weatherService';
+
+// Default Coordinates
 const DEFAULT_LAT = 28.6139;
 const DEFAULT_LON = 77.2090;
-
-// Calculate AQI from PM2.5 (US EPA standard)
-const calculateAQIFromPM25 = (pm25: number): number => {
-  const breakpoints = [
-    { low: 0, high: 12, aqiLow: 0, aqiHigh: 50 },
-    { low: 12.1, high: 35.4, aqiLow: 51, aqiHigh: 100 },
-    { low: 35.5, high: 55.4, aqiLow: 101, aqiHigh: 150 },
-    { low: 55.5, high: 150.4, aqiLow: 151, aqiHigh: 200 },
-    { low: 150.5, high: 250.4, aqiLow: 201, aqiHigh: 300 },
-    { low: 250.5, high: 500.4, aqiLow: 301, aqiHigh: 500 },
-  ];
-
-  for (const bp of breakpoints) {
-    if (pm25 >= bp.low && pm25 <= bp.high) {
-      return Math.round(
-        ((bp.aqiHigh - bp.aqiLow) / (bp.high - bp.low)) * (pm25 - bp.low) + bp.aqiLow
-      );
-    }
-  }
-  return pm25 > 500 ? 500 : 0;
-};
-
-// Fetch air quality from OpenAQ
-const fetchAirQuality = async (): Promise<{ aqi: number; pm25: number; pm10: number; no2: number }> => {
-  try {
-    const response = await fetch(
-      `https://api.openaq.org/v2/latest?coordinates=${DEFAULT_LAT},${DEFAULT_LON}&radius=25000&limit=10`,
-      {
-        headers: {
-          'X-API-Key': OPENAQ_API_KEY,
-          'Accept': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) throw new Error('OpenAQ API error');
-
-    const data = await response.json();
-    let pm25 = 0, pm10 = 0, no2 = 0;
-
-    if (data.results?.[0]?.measurements) {
-      for (const m of data.results[0].measurements) {
-        if (m.parameter === 'pm25') pm25 = m.value;
-        if (m.parameter === 'pm10') pm10 = m.value;
-        if (m.parameter === 'no2') no2 = m.value;
-      }
-    }
-
-    // Use realistic values if API returns 0
-    if (pm25 === 0) pm25 = Math.random() * 150 + 20;
-    if (pm10 === 0) pm10 = Math.random() * 200 + 30;
-    if (no2 === 0) no2 = Math.random() * 80 + 10;
-
-    return {
-      pm25: Math.round(pm25 * 10) / 10,
-      pm10: Math.round(pm10 * 10) / 10,
-      no2: Math.round(no2 * 10) / 10,
-      aqi: calculateAQIFromPM25(pm25),
-    };
-  } catch (error) {
-    console.warn('OpenAQ fetch failed, using simulated data:', error);
-    const pm25 = Math.random() * 150 + 20;
-    return {
-      pm25: Math.round(pm25 * 10) / 10,
-      pm10: Math.round((Math.random() * 200 + 30) * 10) / 10,
-      no2: Math.round((Math.random() * 80 + 10) * 10) / 10,
-      aqi: calculateAQIFromPM25(pm25),
-    };
-  }
-};
-
-// Fetch traffic from TomTom
-const fetchTrafficFlow = async (): Promise<{ congestion: number; speed: number }> => {
-  try {
-    const response = await fetch(
-      `https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${DEFAULT_LAT},${DEFAULT_LON}&key=${TOMTOM_API_KEY}&unit=KMPH`
-    );
-
-    if (!response.ok) throw new Error('TomTom API error');
-
-    const data = await response.json();
-    const flow = data.flowSegmentData;
-    const currentSpeed = flow?.currentSpeed || 30;
-    const freeFlowSpeed = flow?.freeFlowSpeed || 60;
-    const congestion = Math.round(((freeFlowSpeed - currentSpeed) / freeFlowSpeed) * 100);
-
-    return {
-      congestion: Math.max(0, Math.min(100, congestion)),
-      speed: currentSpeed,
-    };
-  } catch (error) {
-    console.warn('TomTom fetch failed, using simulated data:', error);
-    return {
-      congestion: Math.round(30 + Math.random() * 50),
-      speed: Math.round(20 + Math.random() * 40),
-    };
-  }
-};
 
 export interface SmartCityData {
   urban: UrbanMetrics;
@@ -131,9 +34,21 @@ export interface SmartCityData {
   dataSource: 'live' | 'simulated';
   airQuality: { pm25: number; pm10: number; no2: number; aqi: number };
   traffic: { congestion: number; speed: number };
+  weather?: {
+    temp?: number;
+    feelsLike?: number;
+    humidity?: number;
+    pressure?: number;
+    windSpeed?: number;
+    description?: string;
+    icon?: string;
+    sunrise?: number;
+    sunset?: number;
+    forecast?: ForecastData[];
+  };
 }
 
-export const useRealTimeData = (refreshInterval: number = 30000) => {
+export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, refreshInterval: number = 30000) => {
   const [scenario, setScenario] = useState<ScenarioParams>(defaultScenario);
   const [data, setData] = useState<SmartCityData>({
     urban: {
@@ -168,10 +83,11 @@ export const useRealTimeData = (refreshInterval: number = 30000) => {
     setData((prev) => ({ ...prev, isLoading: true }));
 
     try {
-      // Fetch real data in parallel
-      const [airQuality, traffic] = await Promise.all([
-        fetchAirQuality(),
-        fetchTrafficFlow(),
+      // Fetch real data from services
+      const [weatherAQI, traffic, forecast] = await Promise.all([
+        fetchWeatherAndAQI(lat, lon),
+        fetchTrafficData(lat, lon),
+        fetchForecast(lat, lon),
       ]);
 
       // Apply scenario modifiers
@@ -181,7 +97,7 @@ export const useRealTimeData = (refreshInterval: number = 30000) => {
       // Create urban metrics from real data
       const urban: UrbanMetrics = {
         trafficCongestion: Math.max(0, Math.min(100, traffic.congestion + scenarioTrafficMod)),
-        airQualityIndex: Math.max(0, Math.min(500, airQuality.aqi + scenarioAQIMod)),
+        airQualityIndex: Math.max(0, Math.min(500, weatherAQI.aqi + scenarioAQIMod)),
         energyUsage: 800 + Math.random() * 700 + scenario.energyDemand * 10,
         noiseLevel: 45 + Math.random() * 40,
         publicTransportUsage: 20 + Math.random() * 40,
@@ -201,13 +117,33 @@ export const useRealTimeData = (refreshInterval: number = 30000) => {
         lastUpdated: new Date(),
         isLoading: false,
         dataSource: 'live',
-        airQuality,
-        traffic,
+        airQuality: {
+          aqi: weatherAQI.aqi,
+          pm25: weatherAQI.pm25,
+          pm10: weatherAQI.pm10,
+          no2: weatherAQI.no2
+        },
+        traffic: {
+          congestion: traffic.congestion,
+          speed: traffic.speed
+        },
+        weather: {
+          temp: weatherAQI.temp,
+          feelsLike: weatherAQI.feelsLike,
+          humidity: weatherAQI.humidity,
+          pressure: weatherAQI.pressure,
+          windSpeed: weatherAQI.windSpeed,
+          description: weatherAQI.description,
+          icon: weatherAQI.icon,
+          sunrise: weatherAQI.sunrise,
+          sunset: weatherAQI.sunset,
+          forecast: forecast
+        }
       });
     } catch (error) {
-      console.error('Error fetching data:', error);
-      
-      // Fallback to simulated
+      console.error('Error in useRealTimeData:', error);
+
+      // Fallback to simulated data
       const urban: UrbanMetrics = {
         trafficCongestion: 30 + Math.random() * 50,
         airQualityIndex: 50 + Math.random() * 100,
@@ -232,13 +168,10 @@ export const useRealTimeData = (refreshInterval: number = 30000) => {
         dataSource: 'simulated',
       }));
     }
-  }, [scenario]);
+  }, [scenario, lat, lon]);
 
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      fetchAllData();
-    }
+    fetchAllData();
   }, [fetchAllData]);
 
   useEffect(() => {
