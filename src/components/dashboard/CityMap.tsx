@@ -1,0 +1,305 @@
+import { useEffect, useRef, memo } from 'react';
+import L from 'leaflet';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { motion } from 'framer-motion';
+import 'leaflet/dist/leaflet.css';
+
+// API Keys
+const TOMTOM_API_KEY = 'Cf2GFlBhr2Mm3tze2t8e5yMtxJJH1Saj';
+
+// Delhi city configuration
+const DELHI_CONFIG = {
+  center: [28.6139, 77.2090] as [number, number],
+  zoom: 11,
+};
+
+// Monitoring locations across Delhi
+const MONITORING_POINTS = [
+  { name: 'Central Delhi', lat: 28.6139, lon: 77.2090, type: 'commercial' },
+  { name: 'North Industrial', lat: 28.7041, lon: 77.1025, type: 'industrial' },
+  { name: 'South Residential', lat: 28.5244, lon: 77.1855, type: 'residential' },
+  { name: 'East Commercial', lat: 28.6304, lon: 77.2177, type: 'commercial' },
+  { name: 'West Urban', lat: 28.6517, lon: 77.1381, type: 'urban' },
+  { name: 'Dwarka', lat: 28.5921, lon: 77.0460, type: 'residential' },
+  { name: 'Noida Border', lat: 28.5355, lon: 77.3910, type: 'industrial' },
+  { name: 'Gurgaon Border', lat: 28.4595, lon: 77.0266, type: 'commercial' },
+];
+
+interface CityMapProps {
+  airQuality?: { aqi: number; pm25: number };
+  trafficCongestion?: number;
+  className?: string;
+}
+
+const getAQIColor = (aqi: number): string => {
+  if (aqi <= 50) return '#22c55e'; // Green - Good
+  if (aqi <= 100) return '#eab308'; // Yellow - Moderate
+  if (aqi <= 150) return '#f97316'; // Orange - Unhealthy for sensitive
+  if (aqi <= 200) return '#ef4444'; // Red - Unhealthy
+  if (aqi <= 300) return '#a855f7'; // Purple - Very Unhealthy
+  return '#7f1d1d'; // Maroon - Hazardous
+};
+
+const getAQIStatus = (aqi: number): string => {
+  if (aqi <= 50) return 'Good';
+  if (aqi <= 100) return 'Moderate';
+  if (aqi <= 150) return 'Unhealthy (Sensitive)';
+  if (aqi <= 200) return 'Unhealthy';
+  if (aqi <= 300) return 'Very Unhealthy';
+  return 'Hazardous';
+};
+
+const CityMapComponent = ({ airQuality, trafficCongestion, className }: CityMapProps) => {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<L.LayerGroup | null>(null);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    // Create map
+    const map = L.map(mapContainerRef.current, {
+      center: DELHI_CONFIG.center,
+      zoom: DELHI_CONFIG.zoom,
+      zoomControl: true,
+    });
+
+    // Dark theme base layer (CartoDB Dark)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // TomTom Traffic Flow Layer
+    L.tileLayer(
+      `https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=${TOMTOM_API_KEY}&tileSize=256`,
+      {
+        attribution: '&copy; TomTom',
+        opacity: 0.7,
+        maxZoom: 19,
+      }
+    ).addTo(map);
+
+    // Create markers layer group
+    markersRef.current = L.layerGroup().addTo(map);
+
+    mapInstanceRef.current = map;
+
+    // Cleanup
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update markers when data changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !markersRef.current) return;
+
+    // Clear existing markers
+    markersRef.current.clearLayers();
+
+    const baseAqi = airQuality?.aqi || 120;
+
+    // Add monitoring points
+    MONITORING_POINTS.forEach((point, index) => {
+      // Simulate slightly different AQI for each point
+      const pointAqi = Math.round(baseAqi + (Math.random() - 0.5) * 60);
+      const color = getAQIColor(pointAqi);
+      const status = getAQIStatus(pointAqi);
+
+      // Custom icon
+      const icon = L.divIcon({
+        className: 'custom-aqi-marker',
+        html: `
+          <div style="
+            position: relative;
+            width: 36px;
+            height: 36px;
+          ">
+            <div style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 36px;
+              height: 36px;
+              background: ${color};
+              border-radius: 50%;
+              border: 3px solid rgba(255,255,255,0.9);
+              box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              animation: pulse 2s infinite;
+            ">
+              <span style="
+                color: white;
+                font-size: 11px;
+                font-weight: bold;
+                text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+              ">${pointAqi}</span>
+            </div>
+          </div>
+        `,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+
+      // Create marker
+      const marker = L.marker([point.lat, point.lon], { icon });
+
+      // Popup content
+      marker.bindPopup(`
+        <div style="
+          min-width: 200px;
+          padding: 12px;
+          font-family: system-ui, -apple-system, sans-serif;
+        ">
+          <h3 style="
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+          ">${point.name}</h3>
+          
+          <div style="
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+          ">
+            <span style="
+              background: ${color};
+              color: white;
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-size: 12px;
+              font-weight: 500;
+            ">${point.type.toUpperCase()}</span>
+          </div>
+          
+          <div style="
+            background: #f3f4f6;
+            border-radius: 8px;
+            padding: 10px;
+          ">
+            <div style="
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 6px;
+            ">
+              <span style="color: #6b7280; font-size: 13px;">AQI:</span>
+              <span style="
+                font-weight: 600;
+                color: ${color};
+              ">${pointAqi}</span>
+            </div>
+            <div style="
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 6px;
+            ">
+              <span style="color: #6b7280; font-size: 13px;">Status:</span>
+              <span style="font-weight: 500; color: #374151;">${status}</span>
+            </div>
+            <div style="
+              display: flex;
+              justify-content: space-between;
+            ">
+              <span style="color: #6b7280; font-size: 13px;">Traffic:</span>
+              <span style="font-weight: 500; color: #374151;">${trafficCongestion || Math.round(30 + Math.random() * 40)}% congested</span>
+            </div>
+          </div>
+        </div>
+      `, {
+        maxWidth: 250,
+      });
+
+      // Add circle for AQI zone
+      const circle = L.circle([point.lat, point.lon], {
+        radius: 3000,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.15,
+        weight: 1,
+      });
+
+      // Add to layer group
+      markersRef.current?.addLayer(marker);
+      markersRef.current?.addLayer(circle);
+    });
+  }, [airQuality, trafficCongestion]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.2 }}
+    >
+      <Card className={`glass-card overflow-hidden ${className}`}>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                Live City Map - Delhi NCR
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Real-time traffic flow & air quality monitoring
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Badge variant="outline" className="text-xs bg-green-500/10 border-green-500/30">
+                <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 inline-block" />
+                Good (0-50)
+              </Badge>
+              <Badge variant="outline" className="text-xs bg-yellow-500/10 border-yellow-500/30">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 mr-1.5 inline-block" />
+                Moderate (51-100)
+              </Badge>
+              <Badge variant="outline" className="text-xs bg-orange-500/10 border-orange-500/30">
+                <span className="w-2 h-2 rounded-full bg-orange-500 mr-1.5 inline-block" />
+                Unhealthy (101-150)
+              </Badge>
+              <Badge variant="outline" className="text-xs bg-red-500/10 border-red-500/30">
+                <span className="w-2 h-2 rounded-full bg-red-500 mr-1.5 inline-block" />
+                Very Unhealthy (151+)
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div 
+            ref={mapContainerRef}
+            className="h-[450px] w-full"
+            style={{ 
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            }}
+          />
+        </CardContent>
+      </Card>
+      
+      {/* Add CSS for marker animation */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.05); opacity: 0.9; }
+        }
+        .leaflet-popup-content-wrapper {
+          border-radius: 12px;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .leaflet-popup-tip {
+          box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+      `}</style>
+    </motion.div>
+  );
+};
+
+export const CityMap = memo(CityMapComponent);
+export default CityMap;

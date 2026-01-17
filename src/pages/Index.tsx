@@ -27,6 +27,7 @@ import { CityHealthGauge } from '@/components/dashboard/CityHealthGauge';
 import { ScenarioPanel } from '@/components/dashboard/ScenarioPanel';
 import { DataChart } from '@/components/dashboard/DataChart';
 import { RiskHeatmap } from '@/components/dashboard/RiskHeatmap';
+import { CityMap } from '@/components/dashboard/CityMap';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 import { Badge } from '@/components/ui/badge';
 
@@ -153,6 +154,12 @@ const Index = () => {
                     type="health"
                   />
                 </div>
+
+                {/* Interactive City Map */}
+                <CityMap 
+                  airQuality={data.airQuality}
+                  trafficCongestion={data.urban.trafficCongestion}
+                />
 
                 {/* Heatmap */}
                 <RiskHeatmap
