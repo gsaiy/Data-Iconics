@@ -57,6 +57,19 @@ const Index = () => {
     localStorage.setItem('urbanexus_current_location', JSON.stringify(location));
   }, [location]);
 
+  const [savedAreas, setSavedAreas] = useState<{ lat: number; lon: number; name: string }[]>(() => {
+    const saved = localStorage.getItem('urbanexus_saved_areas');
+    return saved ? JSON.parse(saved) : [
+      { name: 'Delhi NCR', lat: 28.6139, lon: 77.2090 },
+      { name: 'Ahmedabad', lat: 23.0225, lon: 72.5714 },
+      { name: 'Gandhinagar', lat: 23.2156, lon: 72.6369 }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('urbanexus_saved_areas', JSON.stringify(savedAreas));
+  }, [savedAreas]);
+
   const { data, scenario, updateScenario, resetScenario, refreshData } = useRealTimeData(location.lat, location.lon, 10000);
 
   useEffect(() => {
@@ -125,6 +138,8 @@ const Index = () => {
                   setActiveSection('overview'); // Go back to overview when location changes
                   toast.success(`Switched to ${loc.name}`);
                 }}
+                savedAreas={savedAreas}
+                onSavedAreasChange={setSavedAreas}
               />
             )}
 
@@ -214,9 +229,10 @@ const Index = () => {
                 <CityMap
                   lat={location.lat}
                   lon={location.lon}
-                  onLocationChange={(lat, lon) => setLocation({ lat, lon, name: 'Selected Location' })}
+                  onLocationChange={(lat, lon, name) => setLocation({ lat, lon, name: name || 'Selected Location' })}
                   airQuality={data.airQuality}
                   trafficCongestion={data.urban.trafficCongestion}
+                  savedLocations={savedAreas}
                 />
 
                 {/* Heatmap */}

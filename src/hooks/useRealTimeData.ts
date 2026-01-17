@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  generateUrbanMetrics,
   generateHealthMetrics,
   generateAgricultureMetrics,
   calculateCityHealthIndex,
@@ -15,12 +16,10 @@ import {
   type ScenarioParams,
 } from '@/lib/dataSimulation';
 
-import { fetchTrafficData } from '@/services/trafficService';
-import { fetchWeatherAndAQI, fetchForecast, type ForecastData } from '@/services/weatherService';
+import { calculateAQI } from '@/services/airQualityService';
 
-// Default Coordinates
-const DEFAULT_LAT = 28.6139;
-const DEFAULT_LON = 77.2090;
+import { fetchTrafficData } from '@/services/trafficService';
+import { fetchWeatherAndAQI, fetchForecast, fetchAirPollutionHistory, type ForecastData } from '@/services/weatherService';
 
 export interface SmartCityData {
   urban: UrbanMetrics;
@@ -68,7 +67,7 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       trend: 'stable',
       riskLevel: 'medium',
     },
-    timeSeries: generateTimeSeriesData(),
+    timeSeries: [], // Start empty
     heatmap: generateHeatmapData(),
     lastUpdated: new Date(),
     isLoading: true,
@@ -77,17 +76,18 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
     traffic: { congestion: 0, speed: 0 },
   });
 
-  const isInitialMount = useRef(true);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   const fetchAllData = useCallback(async () => {
     setData((prev) => ({ ...prev, isLoading: true }));
 
     try {
       // Fetch real data from services
-      const [weatherAQI, traffic, forecast] = await Promise.all([
+      const [weatherAQI, traffic, forecast, aqiHistory] = await Promise.all([
         fetchWeatherAndAQI(lat, lon),
         fetchTrafficData(lat, lon),
         fetchForecast(lat, lon),
+        isFirstLoad ? fetchAirPollutionHistory(lat, lon) : Promise.resolve([])
       ]);
 
       // Apply scenario modifiers
@@ -107,38 +107,75 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       const agriculture = generateAgricultureMetrics(scenario);
       const cityHealth = calculateCityHealthIndex(urban, health, agriculture);
 
-      setData({
+      // Create a point for the current time
+      const currentPoint: TimeSeriesData = {
+        timestamp: new Date(),
         urban,
         health,
-        agriculture,
-        cityHealth,
-        timeSeries: generateTimeSeriesData(),
-        heatmap: generateHeatmapData(),
-        lastUpdated: new Date(),
-        isLoading: false,
-        dataSource: 'live',
-        airQuality: {
-          aqi: weatherAQI.aqi,
-          pm25: weatherAQI.pm25,
-          pm10: weatherAQI.pm10,
-          no2: weatherAQI.no2
-        },
-        traffic: {
-          congestion: traffic.congestion,
-          speed: traffic.speed
-        },
-        weather: {
-          temp: weatherAQI.temp,
-          feelsLike: weatherAQI.feelsLike,
-          humidity: weatherAQI.humidity,
-          pressure: weatherAQI.pressure,
-          windSpeed: weatherAQI.windSpeed,
-          description: weatherAQI.description,
-          icon: weatherAQI.icon,
-          sunrise: weatherAQI.sunrise,
-          sunset: weatherAQI.sunset,
-          forecast: forecast
+        agriculture
+      };
+
+      setData(prev => {
+        let newTimeSeries = [...prev.timeSeries];
+
+        if (isFirstLoad && aqiHistory.length > 0) {
+          // If first load, populate history from API
+          // Map aqi history to time series data (simulating other metrics for the past)
+          newTimeSeries = aqiHistory
+            .filter((_, i) => i % 4 === 0) // Reduce points for performance (every 4 hours)
+            .map(item => {
+              const histAQI = calculateAQI(item.components.pm2_5);
+              return {
+                timestamp: new Date(item.dt * 1000),
+                urban: {
+                  ...generateUrbanMetrics(scenario),
+                  airQualityIndex: histAQI,
+                  trafficCongestion: Math.max(0, Math.min(100, traffic.congestion + (Math.random() * 20 - 10)))
+                },
+                health: generateHealthMetrics(scenario),
+                agriculture: generateAgricultureMetrics(scenario)
+              };
+            });
+
+          setIsFirstLoad(false);
         }
+
+        // Add current point and keep last 24 points
+        newTimeSeries = [...newTimeSeries, currentPoint].slice(-24);
+
+        return {
+          urban,
+          health,
+          agriculture,
+          cityHealth,
+          timeSeries: newTimeSeries,
+          heatmap: generateHeatmapData(),
+          lastUpdated: new Date(),
+          isLoading: false,
+          dataSource: 'live',
+          airQuality: {
+            aqi: weatherAQI.aqi,
+            pm25: weatherAQI.pm25,
+            pm10: weatherAQI.pm10,
+            no2: weatherAQI.no2
+          },
+          traffic: {
+            congestion: traffic.congestion,
+            speed: traffic.speed
+          },
+          weather: {
+            temp: weatherAQI.temp,
+            feelsLike: weatherAQI.feelsLike,
+            humidity: weatherAQI.humidity,
+            pressure: weatherAQI.pressure,
+            windSpeed: weatherAQI.windSpeed,
+            description: weatherAQI.description,
+            icon: weatherAQI.icon,
+            sunrise: weatherAQI.sunrise,
+            sunset: weatherAQI.sunset,
+            forecast: forecast
+          }
+        };
       });
     } catch (error) {
       console.error('Error in useRealTimeData:', error);
@@ -171,8 +208,10 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
   }, [scenario, lat, lon]);
 
   useEffect(() => {
+    setIsFirstLoad(true);
+    setData(prev => ({ ...prev, timeSeries: [] }));
     fetchAllData();
-  }, [fetchAllData]);
+  }, [fetchAllData, lat, lon]);
 
   useEffect(() => {
     const interval = setInterval(fetchAllData, refreshInterval);

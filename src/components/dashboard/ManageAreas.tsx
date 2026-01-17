@@ -11,29 +11,14 @@ import { toast } from 'sonner';
 interface ManageAreasProps {
     currentLocation: { lat: number; lon: number; name: string };
     onLocationSelect: (location: { lat: number; lon: number; name: string }) => void;
+    savedAreas: { lat: number; lon: number; name: string }[];
+    onSavedAreasChange: (areas: { lat: number; lon: number; name: string }[]) => void;
 }
 
-const ManageAreas = ({ currentLocation, onLocationSelect }: ManageAreasProps) => {
+const ManageAreas = ({ currentLocation, onLocationSelect, savedAreas, onSavedAreasChange }: ManageAreasProps) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [results, setResults] = useState<LocationSearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
-    const [savedAreas, setSavedAreas] = useState<{ lat: number; lon: number; name: string }[]>([]);
-
-    useEffect(() => {
-        const saved = localStorage.getItem('urbanexus_saved_areas');
-        if (saved) {
-            setSavedAreas(JSON.parse(saved));
-        } else {
-            // Default areas
-            const defaults = [
-                { name: 'Delhi NCR', lat: 28.6139, lon: 77.2090 },
-                { name: 'Ahmedabad', lat: 23.0225, lon: 72.5714 },
-                { name: 'Gandhinagar', lat: 23.2156, lon: 72.6369 }
-            ];
-            setSavedAreas(defaults);
-            localStorage.setItem('urbanexus_saved_areas', JSON.stringify(defaults));
-        }
-    }, []);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -52,8 +37,7 @@ const ManageAreas = ({ currentLocation, onLocationSelect }: ManageAreasProps) =>
             return;
         }
         const updated = [...savedAreas, newArea];
-        setSavedAreas(updated);
-        localStorage.setItem('urbanexus_saved_areas', JSON.stringify(updated));
+        onSavedAreasChange(updated);
         setSearchQuery('');
         setResults([]);
         toast.success(`Added ${area.name}`);
@@ -62,8 +46,7 @@ const ManageAreas = ({ currentLocation, onLocationSelect }: ManageAreasProps) =>
     const removeArea = (e: React.MouseEvent, index: number) => {
         e.stopPropagation();
         const updated = savedAreas.filter((_, i) => i !== index);
-        setSavedAreas(updated);
-        localStorage.setItem('urbanexus_saved_areas', JSON.stringify(updated));
+        onSavedAreasChange(updated);
         toast.info('Area removed');
     };
 

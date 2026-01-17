@@ -109,3 +109,24 @@ export const fetchForecast = async (lat: number, lon: number): Promise<ForecastD
         }));
     }
 };
+
+export const fetchAirPollutionHistory = async (lat: number, lon: number): Promise<any[]> => {
+    try {
+        const end = Math.floor(Date.now() / 1000);
+        const start = end - (24 * 60 * 60); // Last 24 hours
+
+        const response = await owmClient.get('/air_pollution/history', {
+            params: {
+                lat: lat.toString(),
+                lon: lon.toString(),
+                start,
+                end
+            }
+        });
+
+        return response.data.list || [];
+    } catch (error) {
+        console.error('Error fetching air pollution history:', error);
+        return [];
+    }
+};

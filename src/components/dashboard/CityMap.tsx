@@ -29,9 +29,10 @@ const MONITORING_POINTS = [
 interface CityMapProps {
   lat: number;
   lon: number;
-  onLocationChange: (lat: number, lon: number) => void;
+  onLocationChange: (lat: number, lon: number, name?: string) => void;
   airQuality?: { aqi: number; pm25: number };
   trafficCongestion?: number;
+  savedLocations?: { lat: number; lon: number; name: string }[];
   className?: string;
 }
 
@@ -44,16 +45,7 @@ const getAQIColor = (aqi: number): string => {
   return '#7f1d1d'; // Maroon - Hazardous
 };
 
-const getAQIStatus = (aqi: number): string => {
-  if (aqi <= 50) return 'Good';
-  if (aqi <= 100) return 'Moderate';
-  if (aqi <= 150) return 'Unhealthy (Sensitive)';
-  if (aqi <= 200) return 'Unhealthy';
-  if (aqi <= 300) return 'Very Unhealthy';
-  return 'Hazardous';
-};
-
-const CityMapComponent = ({ lat, lon, onLocationChange, airQuality, trafficCongestion, className }: CityMapProps) => {
+const CityMapComponent = ({ lat, lon, onLocationChange, airQuality, trafficCongestion, savedLocations = [], className }: CityMapProps) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
@@ -85,19 +77,9 @@ const CityMapComponent = ({ lat, lon, onLocationChange, airQuality, trafficConge
       }
     ).addTo(map);
 
-    // TomTom Traffic Incidents Layer
-    L.tileLayer(
-      `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${TOMTOM_API_KEY}&tileSize=256`,
-      {
-        attribution: '&copy; TomTom',
-        opacity: 1,
-        maxZoom: 19,
-      }
-    ).addTo(map);
-
     // Handle map click to set global location
     map.on('click', (e: L.LeafletMouseEvent) => {
-      onLocationChange(e.latlng.lat, e.latlng.lng);
+      onLocationChange(e.latlng.lat, e.latlng.lng, 'Selected Location');
     });
 
     // Create markers layer group
@@ -114,73 +96,139 @@ const CityMapComponent = ({ lat, lon, onLocationChange, airQuality, trafficConge
     };
   }, []);
 
-  // Update markers based on current location
+  // Update markers based on saved locations and current location
   useEffect(() => {
-    if (!markersRef.current) return;
+    if (!markersRef.current || !mapInstanceRef.current) return;
 
     markersRef.current.clearLayers();
 
-    const color = getAQIColor(airQuality?.aqi || 100);
+    // 1. Render all saved locations
+    savedLocations.forEach((loc) => {
+      const isActive = Math.abs(loc.lat - lat) < 0.0001 && Math.abs(loc.lon - lon) < 0.0001;
+      const color = isActive ? getAQIColor(airQuality?.aqi || 100) : '#3b82f6';
 
-    const icon = L.divIcon({
-      className: 'custom-aqi-marker',
-      html: `
-        <div style="position: relative; width: 40px; height: 40px;">
-          <div style="
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 40px;
-            height: 40px;
-            background: ${color};
-            border-radius: 50%;
-            border: 4px solid rgba(255,255,255,0.9);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: pulse 2s infinite;
-          ">
-            <span style="color: white; font-size: 11px; font-weight: bold;">${airQuality?.aqi || '--'}</span>
+      const icon = L.divIcon({
+        className: 'custom-city-marker',
+        html: `
+          <div style="position: relative; width: 32px; height: 32px;">
+            <div style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 32px;
+              height: 32px;
+              background: ${color};
+              border-radius: 50%;
+              border: 3px solid rgba(255,255,255,0.9);
+              box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              ${isActive ? 'animation: pulse 2s infinite;' : ''}
+              cursor: pointer;
+            ">
+              <span style="color: white; font-size: 9px; font-weight: bold;">${isActive ? (airQuality?.aqi || '--') : ''}</span>
+            </div>
+            ${!isActive ? `<div style="position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.8); color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; pointer-events: none;">${loc.name}</div>` : ''}
           </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+
+      const marker = L.marker([loc.lat, loc.lon], { icon });
+
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        onLocationChange(loc.lat, loc.lon, loc.name);
+      });
+
+      marker.bindPopup(`
+        <div style="min-width: 150px; padding: 10px;">
+          <h3 style="margin: 0 0 5px 0; font-size: 14px; font-weight: 600;">${loc.name}</h3>
+          <p style="margin: 0; font-size: 12px; color: #94a3b8;">${isActive ? 'Currently Monitoring' : 'Click to view details'}</p>
         </div>
-      `,
-      iconSize: [40, 40],
-      iconAnchor: [20, 20],
+      `);
+
+      markersRef.current?.addLayer(marker);
     });
 
-    const marker = L.marker([lat, lon], { icon });
-    marker.bindPopup(`
-      <div style="min-width: 180px; padding: 12px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600;">Selected Location</h3>
-        <div style="background: #f3f4f6; border-radius: 8px; padding: 10px; font-size: 13px;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span style="color: #6b7280;">AQI:</span>
-            <span style="font-weight: 600; color: ${color};">${airQuality?.aqi || 'Loading...'}</span>
+    // 2. If current location is not in saved locations, add a temporary marker
+    const isSaved = savedLocations.some(loc => Math.abs(loc.lat - lat) < 0.0001 && Math.abs(loc.lon - lon) < 0.0001);
+
+    if (!isSaved) {
+      const color = getAQIColor(airQuality?.aqi || 100);
+      const icon = L.divIcon({
+        className: 'custom-aqi-marker',
+        html: `
+          <div style="position: relative; width: 40px; height: 40px;">
+            <div style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 40px;
+              height: 40px;
+              background: ${color};
+              border-radius: 50%;
+              border: 4px solid rgba(255,255,255,0.9);
+              box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              animation: pulse 2s infinite;
+            ">
+              <span style="color: white; font-size: 11px; font-weight: bold;">${airQuality?.aqi || '--'}</span>
+            </div>
           </div>
-          <div style="display: flex; justify-content: space-between;">
-            <span style="color: #6b7280;">Traffic:</span>
-            <span style="font-weight: 600;">${trafficCongestion || 0}%</span>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+
+      const marker = L.marker([lat, lon], { icon });
+      marker.bindPopup(`
+        <div style="min-width: 180px; padding: 12px;">
+          <h3 style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600;">Directly Selected</h3>
+          <div style="background: #f3f4f6; border-radius: 8px; padding: 10px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #6b7280;">AQI:</span>
+              <span style="font-weight: 600; color: ${color};">${airQuality?.aqi || 'Loading...'}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #6b7280;">Traffic:</span>
+              <span style="font-weight: 600;">${trafficCongestion || 0}%</span>
+            </div>
           </div>
         </div>
-      </div>
-    `);
+      `);
 
-    const circle = L.circle([lat, lon], {
-      radius: 4000,
-      color: color,
-      fillColor: color,
-      fillOpacity: 0.1,
-      weight: 1,
-    });
+      const circle = L.circle([lat, lon], {
+        radius: 4000,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.1,
+        weight: 1,
+      });
 
-    markersRef.current.addLayer(marker);
-    markersRef.current.addLayer(circle);
+      markersRef.current.addLayer(marker);
+      markersRef.current.addLayer(circle);
+    } else {
+      // Add circle for saved active location too
+      const color = getAQIColor(airQuality?.aqi || 100);
+      const circle = L.circle([lat, lon], {
+        radius: 4000,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.1,
+        weight: 1,
+      });
+      markersRef.current.addLayer(circle);
+    }
 
     if (mapInstanceRef.current) {
       mapInstanceRef.current.panTo([lat, lon]);
     }
-  }, [lat, lon, airQuality, trafficCongestion]);
+  }, [lat, lon, airQuality, trafficCongestion, savedLocations]);
 
   return (
     <motion.div
