@@ -15,7 +15,9 @@ import {
   TrendingUp,
   DollarSign,
   Droplets,
-  Leaf
+  Leaf,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -25,12 +27,12 @@ import { CityHealthGauge } from '@/components/dashboard/CityHealthGauge';
 import { ScenarioPanel } from '@/components/dashboard/ScenarioPanel';
 import { DataChart } from '@/components/dashboard/DataChart';
 import { RiskHeatmap } from '@/components/dashboard/RiskHeatmap';
-import { useSmartCityData } from '@/hooks/useSmartCityData';
-import { cn } from '@/lib/utils';
+import { useRealTimeData } from '@/hooks/useRealTimeData';
+import { Badge } from '@/components/ui/badge';
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState('overview');
-  const { data, scenario, updateScenario, resetScenario, refreshData } = useSmartCityData();
+  const { data, scenario, updateScenario, resetScenario, refreshData } = useRealTimeData(30000);
 
   return (
     <div className="min-h-screen bg-background">
