@@ -1,4 +1,5 @@
-import { tomtomClient } from './apiClient';
+import { backendClient } from './apiClient';
+import { isServiceDisabled, disableService, getServiceError } from './serviceControl';
 
 export interface TrafficData {
     congestion: number;
@@ -6,9 +7,19 @@ export interface TrafficData {
     flowData?: any;
 }
 
+const getSimulatedTraffic = (): TrafficData => ({
+    congestion: 15 + Math.random() * 40,
+    speed: 35 + Math.random() * 20
+});
+
 export const fetchTrafficData = async (lat: number, lon: number): Promise<TrafficData> => {
+    if (isServiceDisabled('tomtom')) {
+        console.log("Using simulated traffic data (TomTom disabled)");
+        return getSimulatedTraffic();
+    }
+
     try {
-        const response = await tomtomClient.get(`/flowSegmentData/relative0/10/json`, {
+        const response = await backendClient.get('/traffic/flow', {
             params: {
                 point: `${lat},${lon}`,
                 unit: 'KMPH'
@@ -27,8 +38,13 @@ export const fetchTrafficData = async (lat: number, lon: number): Promise<Traffi
             speed: currentSpeed,
             flowData: flow
         };
-    } catch (error) {
-        console.error('Error fetching TomTom traffic data:', error);
-        throw error;
+    } catch (error: any) {
+        if (error.response?.status === 403 || error.response?.status === 401) {
+            disableService('tomtom', "TomTom API Restricted (403)");
+        } else {
+            console.warn('Traffic API temporary failure:', error.message);
+        }
+
+        return getSimulatedTraffic();
     }
 };

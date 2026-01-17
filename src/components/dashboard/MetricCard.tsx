@@ -61,13 +61,21 @@ export const MetricCard = ({
           </div>
         )}
       </div>
-      
+
       <div className="flex items-end justify-between">
         <div className="flex items-baseline gap-1">
-          <span className="metric-value">{value}</span>
-          {unit && <span className="text-muted-foreground text-sm">{unit}</span>}
+          <span className="metric-value">
+            {value === 0 || value === '0' || !value ? (
+              <span className="opacity-30">—</span>
+            ) : (
+              value
+            )}
+          </span>
+          {unit && value !== 0 && value !== '0' && value && (
+            <span className="text-muted-foreground text-sm">{unit}</span>
+          )}
         </div>
-        
+
         {trend && (
           <div className={cn('flex items-center gap-1 text-sm', trendColors[trend])}>
             <TrendIcon className="w-4 h-4" />

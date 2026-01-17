@@ -1,73 +1,150 @@
-# Welcome to your Lovable project
+# 🌫️ AQI Monitoring & Visualization Platform
 
-## Project info
+A **data-driven web platform** designed to monitor, analyze, and visualize **Air Quality Index (AQI)** using multiple trusted data sources.  
+The system simplifies complex pollution data into a **single, interpretable AQI value**, enabling citizens, students, and decision-makers to make informed decisions.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+---
 
-## How can I edit this code?
+## 📌 Problem Statement
 
-There are several ways of editing your application.
+Air pollution is a growing concern in urban cities, directly impacting public health, quality of life, and policy decisions.  
+Although AQI data is available from multiple sources, it is often:
 
-**Use Lovable**
+- Fragmented across platforms  
+- Highly technical  
+- Not user-friendly for non-technical users  
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+There is a need for a **centralized, simple, and real-time platform** that:
+- Presents AQI data clearly  
+- Supports historical trend analysis  
+- Enables data-driven decision-making  
 
-Changes made via Lovable will be committed automatically to this repo.
+---
 
-**Use your preferred IDE**
+## 🎯 Solution Overview
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+The **AQI Monitoring & Visualization Platform** acts as a unified intelligence system that:
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Aggregates AQI, weather, traffic, and historical pollution data  
+- Converts pollutant concentrations into a **single AQI index**  
+- Visualizes real-time and historical AQI trends  
+- Provides insights into **traffic–pollution correlation**
 
-Follow these steps:
+---
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## 🏗️ System Architecture
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+The platform follows a modular and scalable architecture:
 
-# Step 3: Install the necessary dependencies.
-npm i
+1. **Data Sources**
+   - OpenWeather API (AQI, pollutants, weather)
+   - TomTom Traffic API (traffic density & congestion)
+   - Web scraping from AQI.in (historical AQI)
+   - Government open data portals
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+2. **Data Ingestion**
+   - API-based data fetching
+   - Web scraping engine for unavailable APIs
 
-**Edit a file directly in GitHub**
+3. **Data Processing & Normalization**
+   - Unified backend data schema
+   - Pollutant-to-AQI conversion
+   - Time-series data cleaning
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+4. **Data Orchestration**
+   - Apache Kafka for real-time streaming
+   - Apache Airflow for pipeline scheduling
 
-**Use GitHub Codespaces**
+5. **Storage**
+   - Centralized AQI data store (Firebase / Database)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+6. **Analytics & ML**
+   - Traffic vs AQI correlation analysis
+   - Predictive models using ML
 
-## What technologies are used for this project?
+7. **Visualization**
+   - Clean, minimal frontend
+   - AQI indicators, graphs, and historical trends
 
-This project is built with:
+---
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🧰 Technology Stack
 
-## How can I deploy this project?
+### Backend
+- Node.js  
+- Express.js  
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+### Frontend
+- React  
+- Next.js  
 
-## Can I connect a custom domain to my Lovable project?
+### Data Processing
+- Apache Kafka  
+- Apache Airflow  
 
-Yes, you can!
+### Analytics & Machine Learning
+- TensorFlow  
+- scikit-learn  
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Data Sources
+- OpenWeather API  
+- TomTom Traffic API  
+- AQI.in (Web Scraping)  
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+---
+
+## ✨ Key Features
+
+- 🌍 Real-time AQI monitoring  
+- 📊 Historical AQI trends & comparisons  
+- 🚦 Traffic and pollution correlation analysis  
+- 🧠 ML-ready architecture for future predictions  
+- 🎨 Clean, user-friendly UI  
+- ⚡ Lightweight and scalable design  
+
+---
+
+## 🎨 Design Philosophy
+
+- **Clarity** – Simplified representation of complex data  
+- **Usability** – Quick insights for non-technical users  
+- **Extensibility** – Easy integration of new APIs and ML models  
+- **Actionability** – Focus on insights, not just raw data  
+
+---
+
+## 📈 Impact & Benefits
+
+- Improved public awareness of air quality  
+- Data-driven urban and traffic planning  
+- Support for public health decisions  
+- Foundation for predictive pollution analytics  
+
+---
+
+## 🚀 Future Roadmap
+
+- Short-term AQI forecasting  
+- Traffic–pollution prediction models  
+- Health advisory recommendations  
+- Mobile application integration  
+- City-level comparison dashboards  
+
+---
+
+## 👨‍💻 Team
+
+**Team Name:** Data Iconics  
+
+- Yash Gangwani (Team Leader)  
+- Harshil Dodwani  
+- Vivek Dhanwani  
+
+---
+
+## 📄 License
+
+This project is developed for academic and hackathon purposes.  
+Feel free to fork and extend with proper attribution.
+
+---

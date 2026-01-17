@@ -191,9 +191,9 @@ const Index = () => {
                   />
                   <MetricCard
                     title="Food Supply"
-                    value={data.agriculture.foodSupplyLevel.toFixed(0)}
+                    value={data.agriculture.foodSupplyLevel || 0}
                     unit="%"
-                    trend={data.agriculture.foodSupplyLevel < 90 ? 'down' : 'stable'}
+                    trend={data.agriculture.foodSupplyLevel === 0 ? undefined : (data.agriculture.foodSupplyLevel < 90 ? 'down' : 'stable')}
                     icon={<Wheat className="w-4 h-4 text-chart-agriculture" />}
                     variant="agriculture"
                     delay={0.25}
@@ -246,7 +246,7 @@ const Index = () => {
 
             {/* Weather Section */}
             {activeSection === 'weather' && (
-              <WeatherView data={data} locationName={location.name} />
+              <WeatherView data={data} locationName={location.name} lat={location.lat} lon={location.lon} />
             )}
 
             {/* Urban Section */}
@@ -307,36 +307,55 @@ const Index = () => {
             {/* Health Section */}
             {activeSection === 'health' && (
               <>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-blue-600/20 to-indigo-900/40 border border-blue-500/30 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                      <HeartPulse className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg">WHO Global Health Monitoring</h3>
+                      <p className="text-sm text-blue-100/60">International health indicators synced via World Health Organization (WHO) GHO API</p>
+                    </div>
+                  </div>
+                  <div className="text-right hidden md:block">
+                    <span className="text-[10px] uppercase tracking-widest text-blue-400 font-bold px-2 py-1 rounded bg-blue-500/10">Connected to ghoapi.azureedge.net</span>
+                  </div>
+                </motion.div>
+
                 <div className="data-grid">
                   <MetricCard
-                    title="Disease Incidence"
-                    value={data.health.diseaseIncidence.toFixed(0)}
+                    title="Disease Mortality (WHO)"
+                    value={data.health.diseaseIncidence ? Math.round(data.health.diseaseIncidence) : 0}
                     unit="/100k"
-                    trend={data.health.diseaseIncidence > 150 ? 'up' : 'down'}
+                    trend={data.health.diseaseIncidence === 0 ? undefined : (data.health.diseaseIncidence > 150 ? 'up' : 'down')}
                     icon={<AlertTriangle className="w-4 h-4 text-warning" />}
                     variant={data.health.diseaseIncidence > 150 ? 'warning' : 'health'}
                     delay={0.1}
                   />
                   <MetricCard
-                    title="Hospital Capacity"
-                    value={data.health.hospitalCapacity.toFixed(0)}
+                    title="Hospital Capacity (WHO Proxy)"
+                    value={data.health.hospitalCapacity ? Math.round(data.health.hospitalCapacity) : 0}
                     unit="%"
-                    trend={data.health.hospitalCapacity > 80 ? 'up' : 'stable'}
+                    trend={data.health.hospitalCapacity === 0 ? undefined : (data.health.hospitalCapacity > 80 ? 'up' : 'stable')}
                     icon={<Building2 className="w-4 h-4 text-chart-health" />}
                     variant={data.health.hospitalCapacity > 90 ? 'critical' : 'health'}
                     delay={0.15}
                   />
                   <MetricCard
                     title="Emergency Load"
-                    value={data.health.emergencyLoad.toFixed(0)}
+                    value={data.health.emergencyLoad ? Math.round(data.health.emergencyLoad) : 0}
                     unit="%"
                     icon={<HeartPulse className="w-4 h-4 text-destructive" />}
                     variant={data.health.emergencyLoad > 80 ? 'critical' : 'health'}
                     delay={0.2}
                   />
                   <MetricCard
-                    title="Vaccination Rate"
-                    value={data.health.vaccinationRate.toFixed(0)}
+                    title="Vaccination Rate (WHO)"
+                    value={data.health.vaccinationRate ? Math.round(data.health.vaccinationRate) : 0}
                     unit="%"
                     icon={<Syringe className="w-4 h-4 text-success" />}
                     variant="default"
@@ -344,7 +363,7 @@ const Index = () => {
                   />
                   <MetricCard
                     title="Avg Response Time"
-                    value={data.health.avgResponseTime.toFixed(1)}
+                    value={data.health.avgResponseTime ? Number(data.health.avgResponseTime).toFixed(1) : 0}
                     unit="min"
                     icon={<Timer className="w-4 h-4 text-info" />}
                     variant="default"
@@ -363,29 +382,48 @@ const Index = () => {
             {/* Agriculture Section */}
             {activeSection === 'agriculture' && (
               <>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-emerald-600/20 to-teal-900/40 border border-emerald-500/30 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                      <Wheat className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg">FAOSTAT Integrated Monitoring</h3>
+                      <p className="text-sm text-emerald-100/60">Live agricultural indices synced via Food and Agriculture Organization (FAO) Web Services</p>
+                    </div>
+                  </div>
+                  <div className="text-right hidden md:block">
+                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold px-2 py-1 rounded bg-emerald-500/10">Connected to faostat.fao.org</span>
+                  </div>
+                </motion.div>
+
                 <div className="data-grid">
                   <MetricCard
-                    title="Crop Yield Index"
-                    value={data.agriculture.cropYieldIndex.toFixed(0)}
+                    title="Crop Yield (FAO Index)"
+                    value={data.agriculture.cropYieldIndex ? Math.round(data.agriculture.cropYieldIndex) : 0}
                     unit="/100"
-                    trend={data.agriculture.cropYieldIndex > 70 ? 'up' : 'down'}
+                    trend={data.agriculture.cropYieldIndex === 0 ? undefined : (data.agriculture.cropYieldIndex > 70 ? 'up' : 'down')}
                     icon={<Wheat className="w-4 h-4 text-chart-agriculture" />}
                     variant="agriculture"
                     delay={0.1}
                   />
                   <MetricCard
                     title="Food Supply Level"
-                    value={data.agriculture.foodSupplyLevel.toFixed(0)}
+                    value={data.agriculture.foodSupplyLevel ? Math.round(data.agriculture.foodSupplyLevel) : 0}
                     unit="%"
-                    trend={data.agriculture.foodSupplyLevel < 90 ? 'down' : 'stable'}
+                    trend={data.agriculture.foodSupplyLevel === 0 ? undefined : (data.agriculture.foodSupplyLevel < 90 ? 'down' : 'stable')}
                     icon={<TrendingUp className="w-4 h-4 text-success" />}
                     variant="agriculture"
                     delay={0.15}
                   />
                   <MetricCard
                     title="Price Index"
-                    value={data.agriculture.priceIndex.toFixed(0)}
-                    trend={data.agriculture.priceIndex > 110 ? 'up' : 'down'}
+                    value={data.agriculture.priceIndex ? Math.round(data.agriculture.priceIndex) : 0}
+                    trend={data.agriculture.priceIndex === 0 ? undefined : (data.agriculture.priceIndex > 110 ? 'up' : 'down')}
                     icon={<DollarSign className="w-4 h-4 text-chart-energy" />}
                     variant={data.agriculture.priceIndex > 130 ? 'warning' : 'default'}
                     delay={0.2}

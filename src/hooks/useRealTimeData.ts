@@ -20,6 +20,8 @@ import { calculateAQI } from '@/services/airQualityService';
 
 import { fetchTrafficData } from '@/services/trafficService';
 import { fetchWeatherAndAQI, fetchForecast, fetchAirPollutionHistory, type ForecastData } from '@/services/weatherService';
+import { fetchFAOAgricultureData } from '@/services/agricultureService';
+import { fetchWHOHealthData } from '@/services/healthService';
 
 export interface SmartCityData {
   urban: UrbanMetrics;
@@ -57,13 +59,25 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       noiseLevel: 60,
       publicTransportUsage: 40,
     },
-    health: generateHealthMetrics(),
-    agriculture: generateAgricultureMetrics(),
+    health: {
+      diseaseIncidence: 0,
+      hospitalCapacity: 0,
+      emergencyLoad: 0,
+      vaccinationRate: 0,
+      avgResponseTime: 0,
+    },
+    agriculture: {
+      cropYieldIndex: 0,
+      foodSupplyLevel: 0,
+      priceIndex: 0,
+      waterUsage: 0,
+      soilHealth: 0,
+    },
     cityHealth: {
       overall: 65,
       urban: 60,
-      health: 70,
-      agriculture: 65,
+      health: 0,
+      agriculture: 0,
       trend: 'stable',
       riskLevel: 'medium',
     },
@@ -82,13 +96,27 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
     setData((prev) => ({ ...prev, isLoading: true }));
 
     try {
-      // Fetch real data from services
-      const [weatherAQI, traffic, forecast, aqiHistory] = await Promise.all([
+      // Fetch real data from services including FAO Agriculture
+      // Fetch real data from services with individual resilience
+      const results = await Promise.allSettled([
         fetchWeatherAndAQI(lat, lon),
         fetchTrafficData(lat, lon),
         fetchForecast(lat, lon),
+        fetchFAOAgricultureData(lat, lon),
+        fetchWHOHealthData(lat, lon),
         isFirstLoad ? fetchAirPollutionHistory(lat, lon) : Promise.resolve([])
       ]);
+
+      const weatherAQI = results[0].status === 'fulfilled' ? results[0].value : ({} as any);
+      const traffic = results[1].status === 'fulfilled' ? results[1].value : { congestion: 45, speed: 40 };
+      const forecast = results[2].status === 'fulfilled' ? results[2].value : [];
+      const agriFAO = results[3].status === 'fulfilled' ? results[3].value : {};
+      const healthWHO = results[4].status === 'fulfilled' ? results[4].value : {};
+      const aqiHistory = results[5].status === 'fulfilled' ? results[5].value : [];
+
+      if (results.some(r => r.status === 'rejected')) {
+        console.warn('Some real-time services failed to load, using fallbacks.');
+      }
 
       // Apply scenario modifiers
       const scenarioAQIMod = scenario.temperature * 3 + scenario.energyDemand * 0.8;
@@ -103,8 +131,14 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
         publicTransportUsage: 20 + Math.random() * 40,
       };
 
-      const health = generateHealthMetrics(scenario);
-      const agriculture = generateAgricultureMetrics(scenario);
+      const health = {
+        ...generateHealthMetrics(scenario),
+        ...(healthWHO as HealthMetrics)
+      };
+      const agriculture = {
+        ...generateAgricultureMetrics(scenario),
+        ...(agriFAO as AgricultureMetrics)
+      };
       const cityHealth = calculateCityHealthIndex(urban, health, agriculture);
 
       // Create a point for the current time

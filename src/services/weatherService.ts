@@ -1,5 +1,6 @@
 import { owmClient } from './apiClient';
 import { calculateAQI } from './airQualityService';
+import { isServiceDisabled, disableService } from './serviceControl';
 
 export interface WeatherAQIData {
     aqi: number;
@@ -24,7 +25,25 @@ export interface ForecastData {
     icon: string;
 }
 
+const getSimulatedWeather = (): WeatherAQIData => {
+    const pm25 = 15 + Math.random() * 50;
+    return {
+        aqi: calculateAQI(pm25),
+        pm25,
+        pm10: 25 + Math.random() * 70,
+        no2: 12 + Math.random() * 40,
+        temp: 22 + Math.random() * 10,
+        feelsLike: 23 + Math.random() * 10,
+        humidity: 40 + Math.random() * 30,
+        windSpeed: 5 + Math.random() * 15,
+        description: 'Partly cloudy (Simulated)',
+        icon: '02d'
+    };
+};
+
 export const fetchWeatherAndAQI = async (lat: number, lon: number): Promise<WeatherAQIData> => {
+    if (isServiceDisabled('openWeather')) return getSimulatedWeather();
+
     try {
         const [aqResponse, weatherResponse] = await Promise.all([
             owmClient.get('/air_pollution', {
@@ -65,25 +84,25 @@ export const fetchWeatherAndAQI = async (lat: number, lon: number): Promise<Weat
             sunrise: weather?.sys?.sunrise,
             sunset: weather?.sys?.sunset
         };
-    } catch (error) {
+    } catch (error: any) {
+        if (error.response?.status === 403 || error.response?.status === 401) {
+            disableService('openWeather');
+        }
         console.error('Error fetching weather/AQI data:', error);
-        const pm25 = 15 + Math.random() * 50;
-        return {
-            aqi: calculateAQI(pm25),
-            pm25,
-            pm10: 25 + Math.random() * 70,
-            no2: 12 + Math.random() * 40,
-            temp: 22 + Math.random() * 10,
-            feelsLike: 23 + Math.random() * 10,
-            humidity: 40 + Math.random() * 30,
-            windSpeed: 5 + Math.random() * 15,
-            description: 'Partly cloudy',
-            icon: '02d'
-        };
+        return getSimulatedWeather();
     }
 };
 
 export const fetchForecast = async (lat: number, lon: number): Promise<ForecastData[]> => {
+    if (isServiceDisabled('openWeather')) {
+        return Array.from({ length: 8 }).map((_, i) => ({
+            dt: Date.now() / 1000 + i * 10800,
+            temp: 20 + Math.random() * 15,
+            description: 'Clear sky (Simulated)',
+            icon: '01d'
+        }));
+    }
+
     try {
         const response = await owmClient.get('/forecast', {
             params: {
@@ -98,19 +117,23 @@ export const fetchForecast = async (lat: number, lon: number): Promise<ForecastD
             description: item.weather[0].description,
             icon: item.weather[0].icon
         }));
-    } catch (error) {
+    } catch (error: any) {
+        if (error.response?.status === 403 || error.response?.status === 401) {
+            disableService('openWeather');
+        }
         console.error('Error fetching forecast:', error);
-        // Simulated forecast
         return Array.from({ length: 8 }).map((_, i) => ({
             dt: Date.now() / 1000 + i * 10800,
             temp: 20 + Math.random() * 15,
-            description: 'Clear sky',
+            description: 'Clear sky (Simulated)',
             icon: '01d'
         }));
     }
 };
 
 export const fetchAirPollutionHistory = async (lat: number, lon: number): Promise<any[]> => {
+    if (isServiceDisabled('openWeather')) return [];
+
     try {
         const end = Math.floor(Date.now() / 1000);
         const start = end - (24 * 60 * 60); // Last 24 hours
@@ -125,7 +148,10 @@ export const fetchAirPollutionHistory = async (lat: number, lon: number): Promis
         });
 
         return response.data.list || [];
-    } catch (error) {
+    } catch (error: any) {
+        if (error.response?.status === 403 || error.response?.status === 401) {
+            disableService('openWeather');
+        }
         console.error('Error fetching air pollution history:', error);
         return [];
     }

@@ -23,7 +23,7 @@ const riskBgColors = {
 
 export const CityHealthGauge = ({ data }: CityHealthGaugeProps) => {
   const TrendIcon = data.trend === 'up' ? TrendingUp : data.trend === 'down' ? TrendingDown : Minus;
-  
+
   // Calculate gauge rotation (-90 to 90 degrees)
   const rotation = (data.overall / 100) * 180 - 90;
 
@@ -58,7 +58,7 @@ export const CityHealthGauge = ({ data }: CityHealthGaugeProps) => {
         <div className="relative w-48 h-24 overflow-hidden">
           {/* Background arc */}
           <div className="absolute inset-0 border-[12px] border-secondary rounded-t-full" />
-          
+
           {/* Colored arc segments */}
           <svg className="absolute inset-0 w-48 h-24" viewBox="0 0 192 96">
             <defs>
@@ -81,7 +81,7 @@ export const CityHealthGauge = ({ data }: CityHealthGaugeProps) => {
               className="transition-all duration-1000"
             />
           </svg>
-          
+
           {/* Needle */}
           <motion.div
             className="absolute bottom-0 left-1/2 w-1 h-20 origin-bottom"
@@ -134,13 +134,17 @@ const SubIndex = ({ label, value, color }: SubIndexProps) => (
   <div className="text-center">
     <div className="text-xs text-muted-foreground mb-1">{label}</div>
     <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
-      <motion.div
-        initial={{ width: 0 }}
-        animate={{ width: `${value}%` }}
-        transition={{ duration: 1, delay: 0.5 }}
-        className={cn('absolute inset-y-0 left-0 rounded-full', `bg-${color}`)}
-      />
+      {value > 0 && (
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${value}%` }}
+          transition={{ duration: 1, delay: 0.5 }}
+          className={cn('absolute inset-y-0 left-0 rounded-full', `bg-${color}`)}
+        />
+      )}
     </div>
-    <div className={cn('text-lg font-semibold font-mono mt-1', `text-${color}`)}>{value}</div>
+    <div className={cn('text-lg font-semibold font-mono mt-1', `text-${color}`)}>
+      {value === 0 ? <span className="opacity-30">—</span> : value}
+    </div>
   </div>
 );

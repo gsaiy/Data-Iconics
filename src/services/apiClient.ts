@@ -38,3 +38,22 @@ export const tomtomSearchClient = axios.create({
         key: import.meta.env.VITE_TOMTOM_KEY
     }
 });
+export const owmOneCallClient = axios.create({
+    baseURL: 'https://api.openweathermap.org/data/3.0',
+    params: {
+        appid: import.meta.env.VITE_OPENWEATHER_KEY,
+        units: 'metric'
+    }
+});
+
+export const meteostatClient = axios.create({
+    baseURL: 'https://meteostat.p.rapidapi.com',
+    headers: {
+        'x-rapidapi-key': RAPIDAPI_KEY,
+        'x-rapidapi-host': 'meteostat.p.rapidapi.com'
+    }
+});
+
+export const backendClient = axios.create({
+    baseURL: 'http://localhost:3001/api'
+});
