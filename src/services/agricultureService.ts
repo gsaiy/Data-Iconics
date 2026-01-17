@@ -1,4 +1,4 @@
-import { AgricultureMetrics } from '@/lib/dataSimulation';
+import { AgricultureMetrics, generateAgricultureMetrics } from '@/lib/dataSimulation';
 import { backendClient } from './apiClient';
 
 /**
@@ -39,13 +39,6 @@ export const fetchFAOAgricultureData = async (lat: number, lon: number): Promise
         console.warn("FAOSTAT Service (backend proxy) unavailable, using cached regional averages.");
     }
 
-    // Validated regional agricultural constants for India (fallback)
-    // This allows the UI to transition from Dash (0) to Real Data (these values) after timeout
-    return {
-        cropYieldIndex: 78,
-        foodSupplyLevel: 91,
-        priceIndex: 112,
-        waterUsage: 260,
-        soilHealth: 80
-    };
+    // Use location-aware simulation as fallback
+    return generateAgricultureMetrics(lat, lon);
 };

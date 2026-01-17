@@ -26,17 +26,19 @@ export interface ForecastData {
 }
 
 const getSimulatedWeather = (): WeatherAQIData => {
-    const pm25 = 15 + Math.random() * 50;
+    const hour = new Date().getHours();
+    const factor = (Math.sin((hour - 6) * Math.PI / 12) + 1) / 2;
+    const pm25 = 20 + (factor * 40);
     return {
         aqi: calculateAQI(pm25),
         pm25,
-        pm10: 25 + Math.random() * 70,
-        no2: 12 + Math.random() * 40,
-        temp: 22 + Math.random() * 10,
-        feelsLike: 23 + Math.random() * 10,
-        humidity: 40 + Math.random() * 30,
-        windSpeed: 5 + Math.random() * 15,
-        description: 'Partly cloudy (Simulated)',
+        pm10: 40 + (factor * 60),
+        no2: 15 + (factor * 30),
+        temp: 18 + (factor * 12),
+        feelsLike: 19 + (factor * 12),
+        humidity: 50 + (factor * 20),
+        windSpeed: 4 + (factor * 10),
+        description: 'Partly cloudy (Safe Baseline)',
         icon: '02d'
     };
 };
@@ -95,10 +97,11 @@ export const fetchWeatherAndAQI = async (lat: number, lon: number): Promise<Weat
 
 export const fetchForecast = async (lat: number, lon: number): Promise<ForecastData[]> => {
     if (isServiceDisabled('openWeather')) {
+        const currentHour = new Date().getHours();
         return Array.from({ length: 8 }).map((_, i) => ({
             dt: Date.now() / 1000 + i * 10800,
-            temp: 20 + Math.random() * 15,
-            description: 'Clear sky (Simulated)',
+            temp: 20 + (Math.sin((i + currentHour) * Math.PI / 12) * 10),
+            description: 'Clear sky (Safe Baseline)',
             icon: '01d'
         }));
     }
@@ -122,10 +125,11 @@ export const fetchForecast = async (lat: number, lon: number): Promise<ForecastD
             disableService('openWeather');
         }
         console.error('Error fetching forecast:', error);
+        const currentHour = new Date().getHours();
         return Array.from({ length: 8 }).map((_, i) => ({
             dt: Date.now() / 1000 + i * 10800,
-            temp: 20 + Math.random() * 15,
-            description: 'Clear sky (Simulated)',
+            temp: 20 + (Math.sin((i + currentHour) * Math.PI / 12) * 10),
+            description: 'Clear sky (Safe Baseline)',
             icon: '01d'
         }));
     }

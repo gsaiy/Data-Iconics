@@ -1,4 +1,4 @@
-import { HealthMetrics } from '@/lib/dataSimulation';
+import { HealthMetrics, generateHealthMetrics } from '@/lib/dataSimulation';
 import { backendClient } from './apiClient';
 
 /**
@@ -55,12 +55,6 @@ export const fetchWHOHealthData = async (lat: number, lon: number): Promise<Part
         console.warn("Using cached regional health averages as fallback.");
     }
 
-    // High-fidelity fallback for India health metrics
-    return {
-        diseaseIncidence: 115,
-        hospitalCapacity: 72,
-        emergencyLoad: 64,
-        vaccinationRate: 89,
-        avgResponseTime: 14
-    };
+    // Use location-aware simulation as fallback
+    return generateHealthMetrics(lat, lon);
 };

@@ -27,44 +27,58 @@ app.get('/api/agri/india', async (req, res) => {
 
         console.log(`[FAOSTAT Proxy] Fetching: ${targetUrl}`);
 
-        const response = await axios.get(targetUrl, { timeout: 30000 });
+        const response = await axios.get(targetUrl, {
+            timeout: 45000,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'UrbanNexus-Dashboard/1.5'
+            }
+        });
         res.json(response.data);
     } catch (error) {
-        console.error('FAOSTAT Proxy Error:', error.message);
-        res.status(500).json({ error: 'Failed to fetch data from FAOSTAT', details: error.message });
+        console.error(`[FAOSTAT Proxy] Fail: ${error.message}`);
+        res.status(500).json({
+            error: 'Failed to fetch data from FAOSTAT',
+            details: error.message,
+            hint: 'This API is often slow; try refreshing.'
+        });
     }
 });
 
 // Proxy for WHO Health Data
 app.get('/api/health/who/:indicator', async (req, res) => {
-    const { indicator } = req.params;
-    const baseUrl = `https://ghoapi.azureedge.net/api/${indicator}`;
-
     try {
-        // Build the target URL manually to ensure %20 is used for spaces
-        // OData on Azure is highly sensitive to space encoding (+)
-        const queryParams = Object.entries(req.query)
-            .map(([key, value]) => `${key}=${String(value).replace(/ /g, '%20')}`)
-            .join('&');
+        const { indicator } = req.params;
+        const baseUrl = `https://ghoapi.azureedge.net/api/${indicator}`;
 
-        const targetUrl = `${baseUrl}${queryParams ? '?' + queryParams : ''}`;
+        // We use req.originalUrl to get the exact raw query string sent by the browser
+        // This prevents Express from messing with encoding during parsing.
+        const fullUrl = req.originalUrl || '';
+        const queryIdx = fullUrl.indexOf('?');
+        const rawQuery = queryIdx !== -1 ? fullUrl.substring(queryIdx + 1) : '';
+
+        // Azure OData services (like WHO) fail on '+' but succeed on '%20'
+        const normalizedQuery = rawQuery.replace(/\+/g, '%20');
+        const targetUrl = `${baseUrl}${normalizedQuery ? '?' + normalizedQuery : ''}`;
+
         console.log(`[WHO Proxy] → ${targetUrl}`);
 
         const response = await axios.get(targetUrl, {
-            timeout: 20000,
+            timeout: 30000, // 30s timeout for slow Azure instances
             headers: {
-                'Accept': 'application/json, text/plain, */*',
-                'User-Agent': 'UrbanNexus-Dashboard/1.2'
+                'Accept': 'application/json',
+                'User-Agent': 'UrbanNexus-Dashboard/1.5'
             }
         });
         res.json(response.data);
     } catch (error) {
-        const errorStatus = error.response?.status || 500;
-        const errorData = error.response?.data || error.message;
-        console.error(`[WHO Proxy] Error ${errorStatus} for ${indicator}:`, errorData);
-        res.status(errorStatus).json({
+        const status = error.response?.status || 500;
+        const data = error.response?.data || error.message;
+        console.error(`[WHO Proxy] Fail ${status}:`, typeof data === 'string' ? data.substring(0, 200) : 'Check logs');
+        res.status(status).json({
             error: 'WHO API Proxy Error',
-            details: errorData
+            upstreamStatus: status,
+            details: data
         });
     }
 });
@@ -91,7 +105,25 @@ app.get('/api/traffic/flow', async (req, res) => {
     }
 });
 
-// Health check
+// Proxy for TomTom Traffic Incidents
+app.get('/api/traffic/incidents', async (req, res) => {
+    try {
+        const { bbox } = req.query; // bbox format: minLon,minLat,maxLon,maxLat
+        const key = process.env.VITE_TOMTOM_KEY;
+        const url = `https://api.tomtom.com/traffic/services/4/incidentDetails/s3/${bbox}/10/-1/json`;
+
+        console.log(`[TomTom Incidents] Fetching for BBox: ${bbox}`);
+
+        const response = await axios.get(url, {
+            params: { key },
+            timeout: 10000
+        });
+        res.json(response.data);
+    } catch (error) {
+        console.error('TomTom Incidents Error:', error.message);
+        res.status(error.response?.status || 500).json({ error: 'Incidents service unavailable' });
+    }
+});
 app.get('/api/status', (req, res) => {
     res.json({ status: 'ok', message: 'UrbanNexus Proxy Server Running' });
 });

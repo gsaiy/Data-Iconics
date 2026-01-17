@@ -7,10 +7,14 @@ export interface TrafficData {
     flowData?: any;
 }
 
-const getSimulatedTraffic = (): TrafficData => ({
-    congestion: 15 + Math.random() * 40,
-    speed: 35 + Math.random() * 20
-});
+const getSimulatedTraffic = (): TrafficData => {
+    const hour = new Date().getHours();
+    const peakFactor = (Math.sin((hour - 6) * Math.PI / 12) + 1) / 2;
+    return {
+        congestion: Math.round(20 + (peakFactor * 60)),
+        speed: Math.round(60 - (peakFactor * 40))
+    };
+};
 
 export const fetchTrafficData = async (lat: number, lon: number): Promise<TrafficData> => {
     if (isServiceDisabled('tomtom')) {

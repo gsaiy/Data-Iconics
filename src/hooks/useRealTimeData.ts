@@ -82,7 +82,7 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       riskLevel: 'medium',
     },
     timeSeries: [], // Start empty
-    heatmap: generateHeatmapData(),
+    heatmap: generateHeatmapData(lat, lon),
     lastUpdated: new Date(),
     isLoading: true,
     dataSource: 'simulated',
@@ -122,21 +122,24 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       const scenarioAQIMod = scenario.temperature * 3 + scenario.energyDemand * 0.8;
       const scenarioTrafficMod = scenario.populationDensity * 0.5 + scenario.rainfall * -0.1;
 
-      // Create urban metrics from real data
+      // Deterministic models for secondary metrics based on Time of Day
+      const currentHour = new Date().getHours();
+      const timeFactor = (Math.sin((currentHour - 6) * Math.PI / 12) + 1) / 2; // Peak at 12:00-18:00
+
       const urban: UrbanMetrics = {
         trafficCongestion: Math.max(0, Math.min(100, traffic.congestion + scenarioTrafficMod)),
         airQualityIndex: Math.max(0, Math.min(500, weatherAQI.aqi + scenarioAQIMod)),
-        energyUsage: 800 + Math.random() * 700 + scenario.energyDemand * 10,
-        noiseLevel: 45 + Math.random() * 40,
-        publicTransportUsage: 20 + Math.random() * 40,
+        energyUsage: 800 + (timeFactor * 600) + scenario.energyDemand * 10,
+        noiseLevel: 50 + (timeFactor * 30),
+        publicTransportUsage: 30 + (timeFactor * 40),
       };
 
       const health = {
-        ...generateHealthMetrics(scenario),
+        ...generateHealthMetrics(lat, lon, scenario),
         ...(healthWHO as HealthMetrics)
       };
       const agriculture = {
-        ...generateAgricultureMetrics(scenario),
+        ...generateAgricultureMetrics(lat, lon, scenario),
         ...(agriFAO as AgricultureMetrics)
       };
       const cityHealth = calculateCityHealthIndex(urban, health, agriculture);
@@ -162,12 +165,12 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
               return {
                 timestamp: new Date(item.dt * 1000),
                 urban: {
-                  ...generateUrbanMetrics(scenario),
+                  ...generateUrbanMetrics(lat, lon, scenario),
                   airQualityIndex: histAQI,
-                  trafficCongestion: Math.max(0, Math.min(100, traffic.congestion + (Math.random() * 20 - 10)))
+                  trafficCongestion: Math.max(0, Math.min(100, traffic.congestion + (Math.sin(item.dt) * 10)))
                 },
-                health: generateHealthMetrics(scenario),
-                agriculture: generateAgricultureMetrics(scenario)
+                health: generateHealthMetrics(lat, lon, scenario),
+                agriculture: generateAgricultureMetrics(lat, lon, scenario)
               };
             });
 
@@ -215,15 +218,18 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       console.error('Error in useRealTimeData:', error);
 
       // Fallback to simulated data
+      const currentHour = new Date().getHours();
+      const timeFactor = (Math.sin((currentHour - 6) * Math.PI / 12) + 1) / 2;
+
       const urban: UrbanMetrics = {
-        trafficCongestion: 30 + Math.random() * 50,
-        airQualityIndex: 50 + Math.random() * 100,
-        energyUsage: 800 + Math.random() * 700,
-        noiseLevel: 45 + Math.random() * 40,
-        publicTransportUsage: 20 + Math.random() * 40,
+        trafficCongestion: 40 + (timeFactor * 40),
+        airQualityIndex: 80 + (timeFactor * 60),
+        energyUsage: 900 + (timeFactor * 500),
+        noiseLevel: 55 + (timeFactor * 25),
+        publicTransportUsage: 35 + (timeFactor * 35),
       };
-      const health = generateHealthMetrics(scenario);
-      const agriculture = generateAgricultureMetrics(scenario);
+      const health = generateHealthMetrics(lat, lon, scenario);
+      const agriculture = generateAgricultureMetrics(lat, lon, scenario);
       const cityHealth = calculateCityHealthIndex(urban, health, agriculture);
 
       setData((prev) => ({
@@ -232,8 +238,8 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
         health,
         agriculture,
         cityHealth,
-        timeSeries: generateTimeSeriesData(),
-        heatmap: generateHeatmapData(),
+        timeSeries: generateTimeSeriesData(lat, lon),
+        heatmap: generateHeatmapData(lat, lon),
         lastUpdated: new Date(),
         isLoading: false,
         dataSource: 'simulated',

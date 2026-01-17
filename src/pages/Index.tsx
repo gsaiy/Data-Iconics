@@ -29,6 +29,7 @@ import { ScenarioPanel } from '@/components/dashboard/ScenarioPanel';
 import { DataChart } from '@/components/dashboard/DataChart';
 import { RiskHeatmap } from '@/components/dashboard/RiskHeatmap';
 import { CityMap } from '@/components/dashboard/CityMap';
+import { TrafficPredictorMap } from '@/components/dashboard/TrafficPredictorMap';
 import WeatherView from '@/components/dashboard/WeatherView';
 import ManageAreas from '@/components/dashboard/ManageAreas';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
@@ -48,6 +49,10 @@ const Index = () => {
       name: 'Delhi NCR'
     };
   });
+
+  const handleLocationChange = (lat: number, lon: number, name?: string) => {
+    setLocation({ lat, lon, name: name || 'Selected Location' });
+  };
 
   useEffect(() => {
     localStorage.setItem('urbanexus_active_section', activeSection);
@@ -301,6 +306,12 @@ const Index = () => {
                   subtitle="24-hour real-time monitoring"
                   type="urban"
                 />
+
+                <TrafficPredictorMap
+                  lat={location.lat}
+                  lon={location.lon}
+                  onLocationChange={handleLocationChange}
+                />
               </>
             )}
 
@@ -482,6 +493,17 @@ const Index = () => {
                   title="Predictive Risk Analysis"
                   subtitle="ML-based risk prediction across districts"
                 />
+                <div className="mt-8">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Car className="w-5 h-5 text-red-400" />
+                    Predictive Traffic Intelligence
+                  </h3>
+                  <TrafficPredictorMap
+                    lat={location.lat}
+                    lon={location.lon}
+                    onLocationChange={handleLocationChange}
+                  />
+                </div>
               </>
             )}
 
