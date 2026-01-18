@@ -36,6 +36,8 @@ import UrbanImpactAnalysis from '@/components/dashboard/UrbanImpactAnalysis';
 import HealthAQICorrelation from '@/components/dashboard/HealthAQICorrelation';
 import AQIPredictor from '@/components/dashboard/AQIPredictor';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
+import ScrapeSchemes from '@/components/agriculture/ScrapeSchemes';
+import ScrapeNews from '@/components/agriculture/ScrapeNews';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
@@ -484,6 +486,10 @@ const Index = () => {
                   subtitle="Food system sustainability indicators"
                   type="agriculture"
                 />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+                  <ScrapeSchemes />
+                  <ScrapeNews />
+                </div>
               </>
             )}
 
