@@ -56,17 +56,26 @@ export interface HeatmapCell {
 
 // Generate deterministic value based on hourly index AND location seed
 const deterministicValue = (min: number, max: number, lat: number = 0, lon: number = 0, seedSuffix: number = 0): number => {
-  const currentHour = new Date().getHours();
+  const now = new Date();
+  const currentHour = now.getHours();
+  // Minute-level variation for "life"
+  const currentMinute = now.getMinutes();
+
   // Create a high-precision stable seed from location (approx 1 meter precision)
-  const locSeed = Math.abs(Math.floor(lat * 1000000) + Math.floor(lon * 1000000));
-  const index = (currentHour + seedSuffix + (locSeed % 48)) % 48; // Use 48 for half-hour resolution interpolation
+  const locSeed = Math.abs(Math.floor(lat * 100000) + Math.floor(lon * 100000));
+  const index = (currentHour + seedSuffix + (locSeed % 48)) % 48;
 
   // Hash the location for a unique offset
-  const locOffset = (locSeed % 1000) / 1000; // 0.0 to 0.999
+  const locOffset = (locSeed % 1000) / 1000;
 
-  const factor = (Math.sin(index * Math.PI / 12) + 1) / 2;
-  // Blend time-of-day factor with location-specific offset
-  const finalFactor = (factor + locOffset) / 2;
+  // Main time-of-day wave
+  const wave = (Math.sin(index * Math.PI / 12) + 1) / 2;
+
+  // Subtle "micro-noise" wave for minute-level movement (0.95 to 1.05 multiplier)
+  const microNoise = 1.0 + (Math.sin(currentMinute * 0.5 + locSeed) * 0.05);
+
+  // Blend waves with location offset
+  const finalFactor = (wave * 0.7 + locOffset * 0.3) * microNoise;
 
   return Math.max(min, Math.min(max, min + (max - min) * finalFactor));
 };

@@ -32,6 +32,7 @@ import { CityMap } from '@/components/dashboard/CityMap';
 import { TrafficPredictorMap } from '@/components/dashboard/TrafficPredictorMap';
 import WeatherView from '@/components/dashboard/WeatherView';
 import ManageAreas from '@/components/dashboard/ManageAreas';
+import UrbanImpactAnalysis from '@/components/dashboard/UrbanImpactAnalysis';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
@@ -313,6 +314,8 @@ const Index = () => {
                   weather={data.weather}
                   onLocationChange={handleLocationChange}
                 />
+
+                <UrbanImpactAnalysis defaultCity={location.name} />
               </>
             )}
 

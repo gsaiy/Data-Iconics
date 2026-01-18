@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { SmartCityData } from '@/hooks/useRealTimeData';
 import { useWeatherHistory } from '@/hooks/useWeatherHistory';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
 interface WeatherViewProps {
     data: SmartCityData;
@@ -95,7 +96,7 @@ const WeatherView = ({ data, locationName, lat, lon }: WeatherViewProps) => {
                                     <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-2 text-sm text-blue-100/60">
                                             <Wind size={16} />
-                                            <span>{weather.windSpeed} km/h Wind</span>
+                                            <span>{Math.round((weather.windSpeed || 0) * 3.6)} km/h Wind</span>
                                         </div>
                                         <div className="flex items-center gap-2 text-sm text-blue-100/60">
                                             <Droplets size={16} />
@@ -122,70 +123,90 @@ const WeatherView = ({ data, locationName, lat, lon }: WeatherViewProps) => {
                 </Card>
             </motion.div>
 
-            {/* Predictive Analysis Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2 glass-card border-none bg-slate-900/40 backdrop-blur-md">
+            {/* Air Quality Detail Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="glass-card border-none bg-slate-900/40 backdrop-blur-md">
+                    <CardHeader>
+                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <Wind className="w-5 h-5 text-chart-urban" />
+                            Air Quality Distribution
+                        </CardTitle>
+                        <CardDescription>Live concentration of primary pollutants (μg/m³)</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[
+                                { label: 'PM2.5', value: data.airQuality?.pm25, max: 250, color: 'bg-red-500' },
+                                { label: 'PM10', value: data.airQuality?.pm10, max: 400, color: 'bg-orange-500' },
+                                { label: 'Nitrogen Dioxide', value: data.airQuality?.no2, max: 200, color: 'bg-blue-500' }
+                            ].map((p, i) => (
+                                <div key={i} className="space-y-2 p-3 rounded-xl bg-white/5 border border-white/5">
+                                    <div className="flex justify-between items-end">
+                                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-tighter">{p.label}</span>
+                                        <span className="text-sm font-bold">{Math.round(p.value || 0)}</span>
+                                    </div>
+                                    <Progress value={Math.min(100, (p.value || 0) / p.max * 100)} className={`h-1.5 ${p.color}/20`} />
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full border-4 border-slate-800 flex items-center justify-center text-lg font-bold">
+                                    {data.airQuality?.aqi}
+                                </div>
+                                <div className="space-y-px">
+                                    <p className="text-sm font-bold">Computed AQI Index</p>
+                                    <p className="text-[10px] text-white/40">US-EPA Standardized Metric</p>
+                                </div>
+                            </div>
+                            <Badge className={`${data.airQuality?.aqi > 150 ? 'bg-red-500' : 'bg-green-500'} text-xs px-4 py-1`}>
+                                {data.airQuality?.aqi > 150 ? 'Action Recommended' : 'Nominal Levels'}
+                            </Badge>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="glass-card border-none bg-slate-900/40 backdrop-blur-md">
                     <CardHeader>
                         <CardTitle className="text-lg font-semibold flex items-center gap-2">
                             <Brain className="w-5 h-5 text-purple-400" />
-                            Environmental Prediction Models
+                            Environmental Prediction
                         </CardTitle>
-                        <CardDescription>Future weather and flood impacts analyzed via Apjoy AI & Firebase</CardDescription>
+                        <CardDescription>Future climate impacts analyzed via predictive models</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        {/* Temperature Row */}
-                        <div className="grid grid-cols-3 gap-4">
-                            {realPredictions.length > 0 ? realPredictions.map((pred, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                        {/* 3-Day Prediction Tiles */}
+                        <div className="grid grid-cols-3 gap-3">
+                            {realPredictions.map((pred, i) => (
+                                <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-2">
                                     <div className="flex justify-between items-start">
-                                        <span className="text-xs font-medium text-white/40 uppercase tracking-tighter">{pred.label}</span>
-                                        <WeatherIcon description={pred.description} size={18} />
+                                        <span className="text-[9px] font-bold text-white/30 uppercase">{pred.label}</span>
+                                        <WeatherIcon description={pred.description} size={14} />
                                     </div>
                                     <div className="flex items-baseline gap-1">
-                                        <span className="text-2xl font-bold">{Math.round(pred.temp)}°</span>
-                                        <TrendingUp className={`w-4 h-4 ${pred.temp > (weather.temp || 0) ? 'text-red-400' : 'text-green-400'}`} />
+                                        <span className="text-lg font-bold">{Math.round(pred.temp)}°</span>
+                                        <TrendingUp className={`w-3 h-3 ${pred.temp > (weather.temp || 0) ? 'text-red-400' : 'text-green-400'}`} />
                                     </div>
-                                    <p className="text-[10px] text-blue-200/50 capitalize">{pred.description}</p>
                                     <div className="space-y-1">
-                                        <div className="flex justify-between text-[10px] text-white/40">
-                                            <span>Accuracy</span>
+                                        <div className="flex justify-between text-[8px] text-white/20">
+                                            <span>Acc.</span>
                                             <span>{pred.confidence}%</span>
                                         </div>
-                                        <Progress value={pred.confidence} className="h-1 bg-white/5" />
+                                        <Progress value={pred.confidence} className="h-0.5 bg-white/5" />
                                     </div>
                                 </div>
-                            )) : (
-                                <div className="col-span-3 py-10 text-center border border-dashed border-white/10 rounded-xl bg-white/5">
-                                    <div className="flex flex-col items-center gap-2 text-white/30">
-                                        {isPredicting ? (
-                                            <>
-                                                <div className="w-5 h-5 border-2 border-primary border-t-transparent animate-spin rounded-full mb-2" />
-                                                <p className="text-sm">Fetching AI Predictions directly from Apjoy AI...</p>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Brain className="w-8 h-8 opacity-20 mb-1" />
-                                                <p className="text-sm font-semibold text-red-400">API Link Failed</p>
-                                                <div className="bg-red-500/10 border border-red-500/20 p-2 rounded text-[10px] text-red-300/80 max-w-[80%] break-words">
-                                                    {errorMessage || "Internal error fetching from Apjoy AI"}
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        localStorage.clear();
-                                                        window.location.reload();
-                                                    }}
-                                                    className="mt-2 text-[9px] uppercase tracking-widest text-blue-400 hover:text-blue-300 underline"
-                                                >
-                                                    Reset API Circuit & Retry
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                            ))}
                         </div>
 
-                        {/* Flood Risk Row */}
+                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                            <p className="text-sm leading-relaxed text-blue-100/80">
+                                <span className="font-bold text-primary">Status:</span> Based on historical trends for {locationName},
+                                current AQI is {data.airQuality?.aqi > 100 ? 'elevated' : 'stable'}.
+                                Temperature is showing a {realPredictions[2]?.temp > (weather.temp || 0) ? 'warming' : 'cooling'} trajectory over the next 72 hours.
+                            </p>
+                        </div>
+
                         <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-600/10 to-transparent border border-blue-500/20">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-3">
@@ -193,40 +214,17 @@ const WeatherView = ({ data, locationName, lat, lon }: WeatherViewProps) => {
                                         <Umbrella size={20} />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-semibold">Flood Probability Index</p>
-                                        {history.length > 0 ? (
-                                            <p className="text-xs text-muted-foreground">{floodRisk.message}</p>
-                                        ) : (
-                                            <p className="text-xs text-yellow-400/60 italic">Waiting for historical trend sync...</p>
-                                        )}
+                                        <p className="text-sm font-semibold">Flood Probability</p>
+                                        <p className="text-xs text-muted-foreground">{floodRisk.message}</p>
                                     </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right whitespace-nowrap">
                                     <span className={`text-2xl font-bold ${floodRisk.level === 'low' ? 'text-green-400' : 'text-red-400'}`}>
                                         {floodRisk.probability}%
                                     </span>
-                                    <p className="text-[10px] uppercase tracking-widest opacity-40">Risk Level: {floodRisk.level}</p>
                                 </div>
                             </div>
                             <Progress value={floodRisk.probability} className="h-2 bg-white/5" />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="glass-card border-none bg-slate-900/40 backdrop-blur-md">
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold">Climate Insight</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
-                            <p className="text-sm leading-relaxed text-blue-100/80">
-                                <span className="font-bold text-primary">Analysis:</span> Based on historical trends for {locationName},
-                                the temperature is showing a {realPredictions[2]?.temp > (weather.temp || 0) ? 'warming' : 'cooling'} trajectory over the next 72 hours.
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground italic">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                            Firebase Synced
                         </div>
                     </CardContent>
                 </Card>

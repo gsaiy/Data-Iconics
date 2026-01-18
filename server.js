@@ -15,8 +15,19 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(morgan('dev'));
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 app.use(express.json());
+
+// Helper for debugging API keys
+const checkKeys = () => {
+    const keys = {
+        TOMTOM: !!process.env.VITE_TOMTOM_KEY,
+        OPENWEATHER: !!process.env.VITE_OPENWEATHER_KEY,
+        RAPIDAPI: !!process.env.VITE_RAPIDAPI_KEY
+    };
+    console.log('[Status] API Keys Status:', keys);
+    return keys;
+};
 
 // Proxy for FAOSTAT
 app.get('/api/agri/india', async (req, res) => {
@@ -37,10 +48,11 @@ app.get('/api/agri/india', async (req, res) => {
         res.json(response.data);
     } catch (error) {
         console.error(`[FAOSTAT Proxy] Fail: ${error.message}`);
-        res.status(500).json({
-            error: 'Failed to fetch data from FAOSTAT',
-            details: error.message,
-            hint: 'This API is often slow; try refreshing.'
+        res.status(200).json({
+            isError: true,
+            error: 'FAOSTAT currently unavailable',
+            fallback: true,
+            data: []
         });
     }
 });
@@ -73,12 +85,13 @@ app.get('/api/health/who/:indicator', async (req, res) => {
         res.json(response.data);
     } catch (error) {
         const status = error.response?.status || 500;
-        const data = error.response?.data || error.message;
-        console.error(`[WHO Proxy] Fail ${status}:`, typeof data === 'string' ? data.substring(0, 200) : 'Check logs');
-        res.status(status).json({
-            error: 'WHO API Proxy Error',
-            upstreamStatus: status,
-            details: data
+        console.error(`[WHO Proxy] Upstream Error ${status}:`, error.message);
+        // Return 200 with an error flag so the frontend can use its fallback
+        res.status(200).json({
+            isError: true,
+            error: 'WHO API unavailable',
+            fallback: true,
+            value: []
         });
     }
 });
@@ -148,10 +161,196 @@ app.get('/api/search/:query', async (req, res) => {
     }
 });
 
+// Proxy for OpenWeatherMap Current
+app.get('/api/weather/current', async (req, res) => {
+    try {
+        const { lat, lon } = req.query;
+        const key = process.env.VITE_OPENWEATHER_KEY;
+        const url = `https://api.openweathermap.org/data/2.5/weather`;
+
+        const response = await axios.get(url, {
+            params: { lat, lon, appid: key, units: 'metric' },
+            timeout: 10000
+        });
+        res.json(response.data);
+    } catch (error) {
+        console.error('Weather Proxy Error:', error.message);
+        res.status(error.response?.status || 500).json({ error: 'Weather service unavailable' });
+    }
+});
+
+// Proxy for OpenWeatherMap Forecast
+app.get('/api/weather/forecast', async (req, res) => {
+    try {
+        const { lat, lon } = req.query;
+        const key = process.env.VITE_OPENWEATHER_KEY;
+        const url = `https://api.openweathermap.org/data/2.5/forecast`;
+
+        const response = await axios.get(url, {
+            params: { lat, lon, appid: key, units: 'metric' },
+            timeout: 10000
+        });
+        res.json(response.data);
+    } catch (error) {
+        console.error('Forecast Proxy Error:', error.message);
+        res.status(error.response?.status || 500).json({ error: 'Forecast service unavailable' });
+    }
+});
+
+// Proxy for OpenWeatherMap Pollution
+app.get('/api/weather/pollution', async (req, res) => {
+    try {
+        const { lat, lon } = req.query;
+        const key = process.env.VITE_OPENWEATHER_KEY;
+        const url = `https://api.openweathermap.org/data/2.5/air_pollution`;
+
+        const response = await axios.get(url, {
+            params: { lat, lon, appid: key },
+            timeout: 10000
+        });
+
+        // Basic validation of response structure
+        if (!response.data || !response.data.list) {
+            console.error('[OpenWeather Proxy] Invalid response structure:', response.data);
+            return res.status(502).json({ error: 'Upstream returned invalid data' });
+        }
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Pollution Proxy Error:', error.message);
+        if (error.response?.data) {
+            console.error('Upstream Detail:', JSON.stringify(error.response.data));
+        }
+        res.status(error.response?.status || 500).json({
+            error: 'Pollution service unavailable',
+            details: error.response?.data?.message || error.message
+        });
+    }
+});
+
+// Proxy for OpenWeatherMap Pollution History
+app.get('/api/weather/pollution/history', async (req, res) => {
+    try {
+        const { lat, lon, start, end } = req.query;
+        const key = process.env.VITE_OPENWEATHER_KEY;
+        const url = `https://api.openweathermap.org/data/2.5/air_pollution/history`;
+
+        const response = await axios.get(url, {
+            params: { lat, lon, start, end, appid: key },
+            timeout: 10000
+        });
+        res.json(response.data);
+    } catch (error) {
+        console.error('Pollution History Proxy Error:', error.message);
+        res.status(error.response?.status || 500).json({ error: 'History service unavailable' });
+    }
+});
+
+// Proxy for Meteostat Daily History
+app.get('/api/history/daily', async (req, res) => {
+    try {
+        const { lat, lon, start, end } = req.query;
+        const key = process.env.VITE_RAPIDAPI_KEY;
+        const url = `https://meteostat.p.rapidapi.com/point/daily`;
+
+        console.log(`[Meteostat Proxy] → ${lat}, ${lon} [${start} to ${end}]`);
+
+        const response = await axios.get(url, {
+            params: { lat, lon, start, end },
+            headers: {
+                'x-rapidapi-key': key,
+                'x-rapidapi-host': 'meteostat.p.rapidapi.com'
+            },
+            timeout: 10000
+        });
+        res.json(response.data);
+    } catch (error) {
+        console.error('Meteostat Proxy Error:', error.message);
+        res.status(error.response?.status || 500).json({ error: 'Meteostat service unavailable' });
+    }
+});
+
+// Proxy for Gemini AI
+app.post(['/api/ai-analyze', '/api/ai/analyze', '/ai-analyze'], async (req, res) => {
+    res.setHeader('X-Proxy-Source', 'UrbanNexus-AI-Proxy');
+    const { prompt } = req.body;
+    const key = process.env.VITE_GEMINI_API_KEY || "AIzaSyCZFj4Oop-o54XloVaqJLxYguKjUNCt9mM";
+
+    // Try Flash first, then Pro
+    const models = ['gemini-1.5-flash', 'gemini-pro'];
+    let lastError = null;
+
+    for (const model of models) {
+        try {
+            const version = model.includes('1.5') ? 'v1beta' : 'v1';
+            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${key}`;
+
+            console.log(`[Gemini Proxy] Attempting ${model}...`);
+
+            const response = await axios.post(url, {
+                contents: [{ role: "user", parts: [{ text: prompt }] }]
+            }, {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 30000
+            });
+
+            console.log(`[Gemini Proxy] ${model} Success!`);
+            return res.json(response.data);
+        } catch (error) {
+            lastError = error;
+            console.warn(`[Gemini Proxy] ${model} failed:`, error.message);
+        }
+    }
+
+    // If all fail
+    console.error('Gemini Proxy: All models failed.');
+    res.status(lastError?.response?.status || 500).json({
+        error: 'AI Analysis Error',
+        details: lastError?.response?.data || lastError?.message
+    });
+});
+
+// Generic Fetch Proxy
+app.get('/api/fetch', async (req, res) => {
+    try {
+        const { url, timeout, headers, params } = req.query;
+
+        if (!url) {
+            return res.status(400).json({ error: 'URL parameter is required.' });
+        }
+
+        console.log(`[Generic Fetch Proxy] Fetching: ${url}`);
+
+        const config = {
+            timeout: parseInt(timeout) || 15000, // Default 15 seconds
+            headers: headers ? JSON.parse(headers) : {},
+            params: params ? JSON.parse(params) : {}
+        };
+
+        const response = await axios.get(url, config);
+        res.json(response.data);
+    } catch (error) {
+        console.error('Generic Fetch Proxy Error:', error.message);
+        res.status(error.response?.status || 500).json({
+            error: 'Failed to fetch data via generic proxy',
+            details: error.message,
+            upstreamStatus: error.response?.status,
+            upstreamData: error.response?.data
+        });
+    }
+});
+
 app.get('/api/status', (req, res) => {
-    res.json({ status: 'ok', message: 'UrbanNexus Proxy Server Running' });
+    const keys = checkKeys();
+    res.json({
+        status: 'ok',
+        message: 'UrbanNexus Proxy Server Running',
+        keys
+    });
 });
 
 app.listen(PORT, () => {
     console.log(`UrbanNexus Proxy Server listening on port ${PORT}`);
+    console.log(`- TomTom Key: ${process.env.VITE_TOMTOM_KEY ? 'Loaded' : 'MISSING'}`);
+    console.log(`- OpenWeather Key: ${process.env.VITE_OPENWEATHER_KEY ? 'Loaded' : 'MISSING'}`);
 });

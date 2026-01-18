@@ -129,9 +129,9 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
       const urban: UrbanMetrics = {
         trafficCongestion: Math.max(0, Math.min(100, traffic.congestion + scenarioTrafficMod)),
         airQualityIndex: Math.max(0, Math.min(500, weatherAQI.aqi + scenarioAQIMod)),
-        energyUsage: 800 + (timeFactor * 600) + scenario.energyDemand * 10,
-        noiseLevel: 50 + (timeFactor * 30),
-        publicTransportUsage: 30 + (timeFactor * 40),
+        energyUsage: generateUrbanMetrics(lat, lon, scenario).energyUsage,
+        noiseLevel: generateUrbanMetrics(lat, lon, scenario).noiseLevel,
+        publicTransportUsage: generateUrbanMetrics(lat, lon, scenario).publicTransportUsage,
       };
 
       const health = {

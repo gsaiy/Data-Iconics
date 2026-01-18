@@ -1,6 +1,6 @@
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { meteostatClient, owmClient } from './apiClient';
+import { backendClient } from './apiClient';
 import { isServiceDisabled, disableService, getServiceError } from './serviceControl';
 
 export interface WeatherHistoryPoint {
@@ -26,11 +26,8 @@ export const fetchFutureWeather = async (lat: number, lon: number, locationName:
     }
 
     try {
-        const response = await owmClient.get('/forecast', {
-            params: {
-                lat: lat.toString(),
-                lon: lon.toString()
-            }
+        const response = await backendClient.get('/weather/forecast', {
+            params: { lat, lon }
         });
 
         const list = response.data?.list || [];
@@ -98,13 +95,8 @@ export const syncWeatherHistory = async (lat: number, lon: number, cityName: str
     const start = new Date(now.getTime() - 5 * 86400000).toISOString().split('T')[0];
 
     try {
-        const response = await meteostatClient.get('/point/daily', {
-            params: {
-                lat: lat.toString(),
-                lon: lon.toString(),
-                start,
-                end
-            }
+        const response = await backendClient.get('/history/daily', {
+            params: { lat, lon, start, end }
         });
 
         if (response.data && response.data.data) {
