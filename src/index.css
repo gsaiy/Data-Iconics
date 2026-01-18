@@ -148,6 +148,7 @@
       opacity: 0;
       transform: translateY(20px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -155,9 +156,12 @@
   }
 
   @keyframes pulse-glow {
-    0%, 100% {
+
+    0%,
+    100% {
       box-shadow: 0 0 20px hsl(187 85% 53% / 0.3);
     }
+
     50% {
       box-shadow: 0 0 40px hsl(187 85% 53% / 0.5);
     }
@@ -167,9 +171,11 @@
     0% {
       background-position: 0% 50%;
     }
+
     50% {
       background-position: 100% 50%;
     }
+
     100% {
       background-position: 0% 50%;
     }
