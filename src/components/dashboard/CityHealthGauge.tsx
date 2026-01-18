@@ -1,10 +1,11 @@
-import { motion } from 'framer-motion';
-import { Activity, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Activity, AlertTriangle, TrendingUp, TrendingDown, Minus, Zap, Info } from 'lucide-react';
 import type { CityHealthIndex } from '@/lib/dataSimulation';
 import { cn } from '@/lib/utils';
 
 interface CityHealthGaugeProps {
   data: CityHealthIndex;
+  isScenarioActive?: boolean;
 }
 
 const riskColors = {
@@ -21,7 +22,7 @@ const riskBgColors = {
   critical: 'bg-destructive/20',
 };
 
-export const CityHealthGauge = ({ data }: CityHealthGaugeProps) => {
+export const CityHealthGauge = ({ data, isScenarioActive }: CityHealthGaugeProps) => {
   const TrendIcon = data.trend === 'up' ? TrendingUp : data.trend === 'down' ? TrendingDown : Minus;
 
   // Calculate gauge rotation (-90 to 90 degrees)
@@ -32,8 +33,20 @@ export const CityHealthGauge = ({ data }: CityHealthGaugeProps) => {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className="glass-card-elevated p-6"
+      className={cn(
+        "glass-card-elevated p-6 relative transition-all duration-500",
+        isScenarioActive ? "ring-2 ring-primary/40 shadow-[0_0_30px_rgba(59,130,246,0.3)]" : "border-none"
+      )}
     >
+      {isScenarioActive && (
+        <div className="absolute top-0 right-0 transform translate-x-1/4 -translate-y-1/4 z-10">
+          <div className="bg-primary px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg animate-bounce">
+            <Zap className="w-3 h-3 text-white" />
+            <span className="text-[10px] font-black text-white uppercase tracking-tighter">Live Scenario Active</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/20">
@@ -120,6 +133,22 @@ export const CityHealthGauge = ({ data }: CityHealthGaugeProps) => {
         <SubIndex label="Health" value={data.health} color="chart-health" />
         <SubIndex label="Agriculture" value={data.agriculture} color="chart-agriculture" />
       </div>
+
+      <AnimatePresence>
+        {isScenarioActive && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-6 pt-4 border-t border-primary/20 flex items-start gap-3 bg-primary/5 rounded-xl p-3"
+          >
+            <Info className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+            <p className="text-[11px] text-primary/80 leading-relaxed font-medium">
+              <span className="font-bold">Scenario Notice:</span> This City Health Index is currently dependent on the active simulation parameters.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

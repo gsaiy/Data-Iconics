@@ -141,48 +141,59 @@ export const generateAgricultureMetrics = (lat: number = 0, lon: number = 0, sce
   };
 };
 
-// Calculate City Health Index
+// Calculate City Health Index with Location Awareness
 export const calculateCityHealthIndex = (
   urban: UrbanMetrics,
   health: HealthMetrics,
-  agriculture: AgricultureMetrics
+  agriculture: AgricultureMetrics,
+  lat: number = 0,
+  lon: number = 0
 ): CityHealthIndex => {
+  // Global location salt to ensure every city feels unique
+  const locSalt = (Math.abs(Math.floor(lat * 100)) + Math.abs(Math.floor(lon * 100))) % 15;
+  const locFactor = (locSalt - 7.5) / 100; // -7.5% to +7.5% variance
+
   // Urban score (inverse of negative metrics)
+  // Heavily weighted by real-time AQI and Traffic
   const urbanScore = (
     (100 - urban.trafficCongestion) * 0.3 +
-    (100 - Math.min(100, urban.airQualityIndex / 3)) * 0.4 +
-    urban.publicTransportUsage * 0.3
+    (100 - Math.min(100, urban.airQualityIndex / 3)) * 0.5 +
+    urban.publicTransportUsage * 0.2
   );
 
-  // Health score
+  // Health score - Reactive to AQI (High AQI increases health risk)
+  const aqiPenalty = urban.airQualityIndex > 100 ? (urban.airQualityIndex - 100) / 10 : 0;
   const healthScore = (
-    (100 - health.hospitalCapacity) * 0.3 +
-    (100 - health.emergencyLoad) * 0.3 +
+    (100 - health.hospitalCapacity) * 0.25 +
+    (100 - health.emergencyLoad) * 0.25 +
     health.vaccinationRate * 0.2 +
-    (100 - Math.min(100, health.diseaseIncidence / 3)) * 0.2
+    (100 - Math.min(100, (health.diseaseIncidence + aqiPenalty) / 3)) * 0.3
   );
 
-  // Agriculture score
+  // Agriculture score - Reactive to traffic (Supply chain delays)
+  const trafficPenalty = urban.trafficCongestion > 70 ? (urban.trafficCongestion - 70) / 5 : 0;
   const agricultureScore = (
-    agriculture.cropYieldIndex * 0.35 +
-    agriculture.foodSupplyLevel * 0.35 +
-    (200 - agriculture.priceIndex) * 0.3
+    agriculture.cropYieldIndex * 0.4 +
+    (agriculture.foodSupplyLevel - trafficPenalty) * 0.4 +
+    (200 - agriculture.priceIndex) * 0.2
   );
 
-  const overall = (urbanScore * 0.35 + healthScore * 0.35 + agricultureScore * 0.3);
+  // Final blend with location-specific profile adjustment
+  let overall = (urbanScore * 0.4 + healthScore * 0.3 + agricultureScore * 0.3);
+  overall = overall * (1 + locFactor);
 
   let riskLevel: 'low' | 'medium' | 'high' | 'critical';
-  if (overall >= 70) riskLevel = 'low';
+  if (overall >= 75) riskLevel = 'low';
   else if (overall >= 55) riskLevel = 'medium';
-  else if (overall >= 40) riskLevel = 'high';
+  else if (overall >= 35) riskLevel = 'high';
   else riskLevel = 'critical';
 
   return {
-    overall: Math.round(overall),
-    urban: Math.round(urbanScore),
-    health: Math.round(healthScore),
-    agriculture: Math.round(agricultureScore),
-    trend: agriculture.cropYieldIndex > 70 ? 'up' : 'stable',
+    overall: Math.round(Math.max(0, Math.min(100, overall))),
+    urban: Math.round(Math.max(0, Math.min(100, urbanScore))),
+    health: Math.round(Math.max(0, Math.min(100, healthScore))),
+    agriculture: Math.round(Math.max(0, Math.min(100, agricultureScore))),
+    trend: overall > 60 ? 'up' : (overall < 40 ? 'down' : 'stable'),
     riskLevel,
   };
 };

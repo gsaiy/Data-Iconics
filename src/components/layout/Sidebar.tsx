@@ -10,7 +10,8 @@ import {
   ChevronRight,
   Zap,
   Cloudy,
-  Map
+  Map,
+  BrainCircuit
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ const navItems = [
   { id: 'agriculture', label: 'Agriculture', icon: Wheat },
   { id: 'analytics', label: 'Analytics', icon: LineChart },
   { id: 'scenarios', label: 'Scenarios', icon: Zap },
+  { id: 'ml-predictor', label: 'AQI ML Predictor', icon: BrainCircuit },
 ];
 
 export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {

@@ -18,6 +18,12 @@ app.use(cors());
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms'));
 app.use(express.json());
 
+// Catch-all logger to debug 404s
+app.use((req, res, next) => {
+    console.log(`[Request] ${req.method} ${req.url}`);
+    next();
+});
+
 // Helper for debugging API keys
 const checkKeys = () => {
     const keys = {
@@ -270,22 +276,144 @@ app.get('/api/history/daily', async (req, res) => {
     }
 });
 
+// Proxy for OpenRouter AI
+app.post(['/api/ai/openrouter', '/ai/openrouter', '/api/openrouter', '/ai/ai/openrouter'], async (req, res) => {
+    try {
+        const { prompt } = req.body;
+        const key = process.env.VITE_OPENROUTER_API_KEY;
+        const url = 'https://openrouter.ai/api/v1/chat/completions';
+
+        console.log(`[OpenRouter Proxy] Incoming request for prompt length: ${prompt?.length}`);
+
+        // Try multiple free reliable models
+        const models = [
+            "google/gemini-2.0-flash-exp:free",
+            "meta-llama/llama-3.1-8b-instruct:free",
+            "mistralai/mistral-7b-instruct:free"
+        ];
+
+        let lastError = null;
+        for (const model of models) {
+            try {
+                console.log(`[OpenRouter Proxy] Attempting model: ${model}`);
+                const response = await axios.post(url, {
+                    model: model,
+                    messages: [
+                        { role: "system", content: "You are a specialized urban infrastructure and environmental analysis assistant. Always output valid JSON." },
+                        { role: "user", content: prompt }
+                    ],
+                    response_format: { type: 'json_object' }
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${key}`,
+                        'HTTP-Referer': 'http://localhost:3000',
+                        'X-Title': 'UrbanNexus Intelligence'
+                    },
+                    timeout: 25000
+                });
+
+                const content = response.data.choices[0].message.content;
+                return res.json({
+                    candidates: [{
+                        content: {
+                            parts: [{ text: content }]
+                        }
+                    }]
+                });
+            } catch (err) {
+                lastError = err;
+                console.warn(`[OpenRouter] ${model} failed:`, err.response?.data?.error?.message || err.message);
+                if (err.response?.status === 401 || err.response?.status === 403) break; // Don't retry on auth errors
+            }
+        }
+
+        throw lastError;
+    } catch (error) {
+        console.error('OpenRouter Proxy Final Failure:', error.message);
+        res.status(error.response?.status || 500).json({
+            error: 'OpenRouter AI Error',
+            details: error.response?.data || error.message
+        });
+    }
+});
+
+// Proxy for DeepSeek AI
+app.post(['/api/ai/deepseek', '/ai/deepseek', '/api/deepseek', '/ai/ai/deepseek'], async (req, res) => {
+    try {
+        const { prompt } = req.body;
+        const key = process.env.VITE_DEEPSEEK_API_KEY;
+        const url = 'https://api.deepseek.com/chat/completions';
+
+        console.log(`[DeepSeek Proxy] Processing AI request...`);
+
+        const response = await axios.post(url, {
+            model: "deepseek-chat",
+            messages: [
+                { role: "system", content: "You are a specialized urban infrastructure and environmental analysis assistant. Always output valid JSON." },
+                { role: "user", content: prompt }
+            ],
+            stream: false,
+            response_format: { type: 'json_object' }
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            timeout: 30000
+        });
+
+        // Map DeepSeek response format to match what our frontend expects (Gemini-like or raw JSON)
+        const content = response.data.choices[0].message.content;
+
+        // We return it in a way that matches our expected frontend parsing
+        res.json({
+            candidates: [{
+                content: {
+                    parts: [{ text: content }]
+                }
+            }]
+        });
+    } catch (error) {
+        if (error.response?.status === 402) {
+            console.error('[DeepSeek] Payment Required. Please check your balance.');
+            return res.status(402).json({
+                error: 'AI Credits Exhausted',
+                details: 'DeepSeek balance is 0. Please top up your account or switch to Gemini.'
+            });
+        }
+        console.error('DeepSeek Proxy Error:', error.message);
+        if (error.response) {
+            console.error('Details:', JSON.stringify(error.response.data));
+        }
+        res.status(error.response?.status || 500).json({
+            error: 'DeepSeek AI Error',
+            details: error.response?.data || error.message
+        });
+    }
+});
+
 // Proxy for Gemini AI
-app.post(['/api/ai-analyze', '/api/ai/analyze', '/ai-analyze'], async (req, res) => {
+app.post(['/api/ai-analyze', '/api/ai/analyze', '/ai-analyze', '/ai/analyze'], async (req, res) => {
+    console.log(`[Gemini Proxy] Incoming request hit...`);
     res.setHeader('X-Proxy-Source', 'UrbanNexus-AI-Proxy');
     const { prompt } = req.body;
     const key = process.env.VITE_GEMINI_API_KEY || "AIzaSyCZFj4Oop-o54XloVaqJLxYguKjUNCt9mM";
 
-    // Try Flash first, then Pro
-    const models = ['gemini-1.5-flash', 'gemini-pro'];
+    // List of models to try in order of preference
+    const modelsToTry = [
+        { name: 'gemini-1.5-flash', version: 'v1beta' },
+        { name: 'gemini-1.5-flash-latest', version: 'v1beta' },
+        { name: 'gemini-pro', version: 'v1' },
+        { name: 'gemini-1.0-pro', version: 'v1' }
+    ];
+
     let lastError = null;
 
-    for (const model of models) {
+    for (const m of modelsToTry) {
         try {
-            const version = model.includes('1.5') ? 'v1beta' : 'v1';
-            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${key}`;
-
-            console.log(`[Gemini Proxy] Attempting ${model}...`);
+            const url = `https://generativelanguage.googleapis.com/${m.version}/models/${m.name}:generateContent?key=${key}`;
+            console.log(`[Gemini Proxy] Attempting ${m.name} (${m.version})...`);
 
             const response = await axios.post(url, {
                 contents: [{ role: "user", parts: [{ text: prompt }] }]
@@ -294,11 +422,16 @@ app.post(['/api/ai-analyze', '/api/ai/analyze', '/ai-analyze'], async (req, res)
                 timeout: 30000
             });
 
-            console.log(`[Gemini Proxy] ${model} Success!`);
+            console.log(`[Gemini Proxy] ${m.name} Success!`);
             return res.json(response.data);
         } catch (error) {
             lastError = error;
-            console.warn(`[Gemini Proxy] ${model} failed:`, error.message);
+            const status = error.response?.status;
+            const msg = error.response?.data?.error?.message || error.message;
+            console.warn(`[Gemini Proxy] ${m.name} failed (${status}): ${msg}`);
+
+            // If it's a 403 (Permission) or 400 (Bad Request), don't keep trying the same key
+            if (status === 403 || status === 400) break;
         }
     }
 
@@ -349,8 +482,15 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+// Final Catch-all for 404s - MUST be last
+app.use((req, res) => {
+    console.warn(`[404] Route Not Found: ${req.method} ${req.url}`);
+    res.status(404).json({ error: 'Endpoint not found', path: req.url });
+});
+
 app.listen(PORT, () => {
     console.log(`UrbanNexus Proxy Server listening on port ${PORT}`);
     console.log(`- TomTom Key: ${process.env.VITE_TOMTOM_KEY ? 'Loaded' : 'MISSING'}`);
     console.log(`- OpenWeather Key: ${process.env.VITE_OPENWEATHER_KEY ? 'Loaded' : 'MISSING'}`);
+    console.log(`- OpenRouter Key: ${process.env.VITE_OPENROUTER_API_KEY ? 'Loaded' : 'MISSING'}`);
 });

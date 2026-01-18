@@ -107,7 +107,7 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
         isFirstLoad ? fetchAirPollutionHistory(lat, lon) : Promise.resolve([])
       ]);
 
-      const weatherAQI = results[0].status === 'fulfilled' ? results[0].value : ({} as any);
+      const weatherAQI = results[0].status === 'fulfilled' ? results[0].value : { aqi: 0, pm25: 0, pm10: 0, no2: 0 };
       const traffic = results[1].status === 'fulfilled' ? results[1].value : { congestion: 45, speed: 40 };
       const forecast = results[2].status === 'fulfilled' ? results[2].value : [];
       const agriFAO = results[3].status === 'fulfilled' ? results[3].value : {};
@@ -142,7 +142,7 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
         ...generateAgricultureMetrics(lat, lon, scenario),
         ...(agriFAO as AgricultureMetrics)
       };
-      const cityHealth = calculateCityHealthIndex(urban, health, agriculture);
+      const cityHealth = calculateCityHealthIndex(urban, health, agriculture, lat, lon);
 
       // Create a point for the current time
       const currentPoint: TimeSeriesData = {
@@ -186,7 +186,7 @@ export const useRealTimeData = (lat: number = 28.6139, lon: number = 77.2090, re
           agriculture,
           cityHealth,
           timeSeries: newTimeSeries,
-          heatmap: generateHeatmapData(),
+          heatmap: generateHeatmapData(lat, lon),
           lastUpdated: new Date(),
           isLoading: false,
           dataSource: 'live',

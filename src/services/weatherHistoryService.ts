@@ -9,6 +9,7 @@ export interface WeatherHistoryPoint {
     humidity: number;
     wind_speed: number;
     description: string;
+    prcp?: number;
 }
 
 export interface WeatherPrediction {
@@ -107,7 +108,8 @@ export const syncWeatherHistory = async (lat: number, lon: number, cityName: str
                     temp: day.tavg,
                     humidity: day.rhum || 50,
                     wind_speed: day.wspd || 0,
-                    description: 'Observed'
+                    description: 'Observed',
+                    prcp: day.prcp || 0
                 };
 
                 // Store in Firebase
@@ -132,21 +134,63 @@ export const syncWeatherHistory = async (lat: number, lon: number, cityName: str
 };
 
 /**
- * Flood Risk Model remains as a logical calculation based on RECENT metrics
+ * Enhanced Flood Risk Model: Uses Forecast API 'pop' (Probability of Precipitation)
+ * and Meteostat-based Ground Saturation Factor (GSF).
  */
-export const calculateFloodRisk = (history: WeatherHistoryPoint[], currentRainfallPercentage: number) => {
-    if (history.length === 0) return { probability: 0, level: 'low', message: 'No historical data for risk calculation' };
+export const calculateFloodRisk = (history: WeatherHistoryPoint[], currentRainfallPercentage: number, currentMetrics?: any) => {
+    // 1. Calculate Ground Saturation Factor (GSF) from Meteostat History
+    // A high accumulation of rain in the last 5 days lowers the ground's absorption capacity.
+    const historicalRainfall = history.reduce((sum, point) => sum + (point.prcp || 0), 0);
+    const saturationMultiplier = historicalRainfall > 50 ? 1.5 : (historicalRainfall > 20 ? 1.2 : 1.0);
+    const hasHighSaturation = historicalRainfall > 30;
 
-    // Meteostat provides 'prcp' (precipitation) in some endpoints. 
-    // For now we use the general logic or check if temp/humidity indicate storms
-    const heavyRainProbability = history.filter(p => p.temp > 25 && p.humidity > 80).length;
+    // Advanced Reactive Logic
+    const humidity = currentMetrics?.humidity || 50;
+    const pressure = currentMetrics?.pressure || 1013;
+    const clouds = currentMetrics?.clouds || 0;
+    const description = (currentMetrics?.description || '').toLowerCase();
 
-    const baseProbability = (heavyRainProbability / history.length) * 40;
-    const probability = Math.min(100, Math.round(baseProbability + (currentRainfallPercentage * 0.6)));
+    // API Forecast Link (Priority)
+    const apiPop = currentMetrics?.forecast?.[0]?.pop || 0; // 0.0 to 1.0
+    const apiRiskBase = apiPop * 100;
+
+    // Atmospheric Overrides
+    const isRaining = description.includes('rain') || description.includes('drizzle');
+    const isStormy = description.includes('storm') || description.includes('thunder');
+
+    // Risk Calculation blending API forecast, Local Atmospheric conditions, and Meteostat History
+    let combinedRisk = apiRiskBase * saturationMultiplier;
+
+    // Elevated baseline if ground is already seeing rain
+    if (isRaining) combinedRisk = Math.max(combinedRisk, 40 * saturationMultiplier);
+    if (isStormy) combinedRisk = Math.max(combinedRisk, 75 * saturationMultiplier);
+
+    // Pressure Delta adjustment
+    if (pressure < 1005) combinedRisk += 15;
+
+    // Saturation Penalty (Meteostat specific)
+    if (hasHighSaturation) combinedRisk += 20;
+
+    // Simulation/Scenario influence
+    combinedRisk += (currentRainfallPercentage * 0.4);
+
+    // Final probability clamping
+    const finalProb = Math.min(100, Math.round(combinedRisk));
+
+    // Intelligence Messaging based on combined factors
+    let msg = 'Regional drainage systems operating within nominal capacity.';
+    if (hasHighSaturation) msg = `Meteostat alert: Ground saturated (${historicalRainfall.toFixed(1)}mm last 5 days). Absorption limited.`;
+    if (isStormy) msg = 'Meteorological alert: Severe convection patterns detected.';
+    else if (isRaining) msg = 'API Forecast: High precipitation density confirmed.';
+    else if (apiPop > 0.6) msg = 'Official API Forecast predicts incoming heavy rain.';
+    else if (pressure < 1008) msg = 'Low pressure trough detected via satellite data.';
+
+    // Risk Leveling
+    const level = finalProb > 80 ? 'critical' : finalProb > 50 ? 'high' : finalProb > 25 ? 'moderate' : 'low';
 
     return {
-        probability,
-        level: probability > 80 ? 'critical' : probability > 50 ? 'high' : probability > 20 ? 'moderate' : 'low',
-        message: probability > 50 ? 'Extreme rainfall pattern detected in model' : 'Climate trajectory within normal bounds'
+        probability: finalProb,
+        level,
+        message: msg
     };
 };

@@ -30,6 +30,7 @@ interface WeatherViewProps {
     locationName: string;
     lat: number;
     lon: number;
+    scenarioRainfall?: number;
 }
 
 const WeatherIcon = ({ description, size = 24 }: { description: string; size?: number }) => {
@@ -42,7 +43,7 @@ const WeatherIcon = ({ description, size = 24 }: { description: string; size?: n
     return <Cloud className={`text-gray-400`} size={size} />;
 };
 
-const WeatherView = ({ data, locationName, lat, lon }: WeatherViewProps) => {
+const WeatherView = ({ data, locationName, lat, lon, scenarioRainfall = 0 }: WeatherViewProps) => {
     const weather = data.weather;
 
     // Fetch history and run models
@@ -55,7 +56,8 @@ const WeatherView = ({ data, locationName, lat, lon }: WeatherViewProps) => {
         lat,
         lon,
         locationName,
-        data.urban?.airQualityIndex > 0 ? 0 : 0 // dummy for reactivity
+        scenarioRainfall,
+        weather
     );
 
     if (!weather) return null;

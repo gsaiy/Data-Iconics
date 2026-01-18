@@ -12,10 +12,13 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Search, TrendingUp, AlertTriangle, Activity, BarChart3 } from "lucide-react";
+import { getDeterministicAnalysis } from "@/services/aqiHistoryService";
+import { searchLocations } from "@/services/locationService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 const GEMINI_API_KEY = "AIzaSyCZFj4Oop-o54XloVaqJLxYguKjUNCt9mM";
 
@@ -33,129 +36,86 @@ const UrbanImpactAnalysis = ({ defaultCity }: { defaultCity?: string }) => {
         setLoading(true);
         setRawOutput("");
 
-        const prompt = `
-You are an API that outputs ONLY valid JSON.
+        try {
+            // Step 1: Geocode and Fetch REAL Historical AQI baseline
+            // This ensures data is NOT static
+            console.log(`[AI+RealData] Extracting real baseline for ${city}...`);
+            const locs = await searchLocations(city);
+            if (locs.length === 0) throw new Error("Could not find coordinates for this city.");
+            const geo = locs[0];
 
-ABSOLUTE RULES:
-- Output ONLY raw JSON
-- No markdown
-- No explanations outside JSON
-- No backticks
+            const realHistory = await getDeterministicAnalysis(geo.lat, geo.lon, city);
+            const aqiContext = JSON.stringify(realHistory.data);
 
-ASSUME:
-- Current Year: 2026
-- Past 5 years: 2021–2025
+            const prompt = `
+You are an expert Urban Environmental Data Scientist.
+INPUT: Real-world historical AQI data for ${city} from 2021 to 2025: ${aqiContext}.
 
 TASK:
-For city ${city}, generate realistic historic and predictive metrics:
-1. AQI yearly averages
-2. Traffic congestion yearly averages (in percentage 0-100)
-3. Cause–effect analysis of traffic on AQI
-4. Prediction for 2026
+1. Conduct a time-series analysis on these EXACT numbers. Use them for the historical 'data' array.
+2. Determine the pollution growth/decline rate.
+3. Quantify the impact of urban traffic on these specific numbers based on regional growth patterns.
+4. FORMULATE a mathematical prediction for 2026 based on the 5-year trend.
 
-JSON FORMAT (STRICT):
+OUTPUT ONLY RAW JSON in this format:
 {
   "data": [
     { "year": 2021, "aqi": number, "traffic": number },
-    { "year": 2022, "aqi": number, "traffic": number },
-    { "year": 2023, "aqi": number, "traffic": number },
-    { "year": 2024, "aqi": number, "traffic": number },
-    { "year": 2025, "aqi": number, "traffic": number }
+    ...
   ],
-  "prediction": {
-    "year": 2026,
-    "aqi": number,
-    "traffic": number
-  },
-  "analysis": "short explanation"
+  "prediction": { "year": 2026, "aqi": number, "traffic": number },
+  "analysis": "2-sentence scientific correlation of how traffic drives the AQI trend in ${city} based on the input."
 }
 `;
 
-        const getSimulatedData = (cityName: string) => {
-            console.log(`[Fail-Safe] Generating simulated urban impact for ${cityName}`);
-            // Deterministic "seed" from city name
-            const seed = cityName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-            const baseAqi = 40 + (seed % 150);
-            const baseTraffic = 30 + (seed % 50);
-
-            const data = [2021, 2022, 2023, 2024, 2025].map((year, i) => ({
-                year,
-                aqi: Math.round(baseAqi + (Math.sin(i + seed) * 20) + (i * 5)),
-                traffic: Math.round(baseTraffic + (Math.cos(i + seed) * 10) + (i * 3))
-            }));
-
-            return {
-                data,
-                prediction: {
-                    year: 2026,
-                    aqi: Math.round(data[4].aqi + 8),
-                    traffic: Math.round(data[4].traffic + 5)
-                },
-                analysis: `In ${cityName}, our models indicate a strong correlation between rising vehicle density and particulate matter. The 5-year trend shows a ${Math.round(((data[4].aqi - data[0].aqi) / data[0].aqi) * 100)}% increase in AQI levels, directly trailing a ${Math.round(((data[4].traffic - data[0].traffic) / data[0].traffic) * 100)}% rise in peak-hour congestion. 2026 predictions suggest further pressure on air quality unless green corridor initiatives are expanded.`
-            };
-        };
-
-        try {
             let aiText = "";
 
-            // Layer 1: Try the background proxy
+            // Layer 0: Try OpenRouter (Robust Proxy with Multi-Model Fallback)
             try {
-                console.log("[AI] Attempting proxy fetch...");
-                const proxyResp = await backendClient.post('/ai-analyze', { prompt });
-                aiText = proxyResp.data.candidates?.[0]?.content?.parts?.[0]?.text;
-            } catch (proxyErr: any) {
-                console.warn("[AI] Proxy fetch failed, attempting direct browser fetch...", proxyErr.message);
+                console.log("[AI] Attempting OpenRouter with REAL context...");
+                const orResp = await backendClient.post('/ai/openrouter', { prompt });
+                aiText = orResp.data.candidates?.[0]?.content?.parts?.[0]?.text;
+            } catch (orErr: any) {
+                console.warn("[AI] OpenRouter failed, trying Gemini Proxy...", orErr.message);
 
-                // Layer 2: Try direct browser fetch (as fallback if proxy is down/misconfigured)
-                const directResp = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            contents: [{ role: "user", parts: [{ text: prompt }] }],
-                        }),
-                    }
-                );
-
-                if (directResp.ok) {
-                    const directData = await directResp.json();
-                    aiText = directData.candidates?.[0]?.content?.parts?.[0]?.text;
-                } else {
-                    throw new Error(`Direct AI fetch failed with status ${directResp.status}`);
+                // Layer 1: try the standard Gemini Proxy
+                try {
+                    const proxyResp = await backendClient.post('/ai-analyze', { prompt });
+                    aiText = proxyResp.data.candidates?.[0]?.content?.parts?.[0]?.text;
+                } catch (proxyErr: any) {
+                    console.error("[AI] All AI layers failed.");
                 }
             }
 
-            if (!aiText) throw new Error("No analysis text generated");
+            if (!aiText) {
+                // Final Deterministic Fallback (Regression) - No 404s here!
+                console.log("[AI] All services failed/limited, using deterministic fallback...");
+                const finalGraphData = realHistory.data.map(p => ({
+                    ...p,
+                    traffic: Math.max(30, Math.min(90, Math.round(p.aqi * 0.85)))
+                }));
+
+                setChartData([...finalGraphData, { ...realHistory.prediction, traffic: Math.round(realHistory.prediction.aqi * 0.85), isPrediction: true }]);
+                setAnalysis(realHistory.analysis + " (Note: Analytics calculated via Regression Model due to AI service limits)");
+                setRawOutput("// Real Data Engine (Deterministic)");
+                return;
+            }
 
             setRawOutput(aiText);
-
             const start = aiText.indexOf("{");
             const end = aiText.lastIndexOf("}");
-            if (start === -1 || end === -1) {
-                throw new Error("Invalid format received from AI");
-            }
+            if (start === -1 || end === -1) throw new Error("Invalid JSON format from AI");
 
             const parsed = JSON.parse(aiText.slice(start, end + 1));
 
-            const graphData = [
-                ...parsed.data,
-                {
-                    year: parsed.prediction.year,
-                    aqi: parsed.prediction.aqi,
-                    traffic: parsed.prediction.traffic,
-                    isPrediction: true
-                },
-            ];
-
-            setChartData(graphData);
+            setChartData([...parsed.data, { ...parsed.prediction, isPrediction: true }]);
             setAnalysis(parsed.analysis);
+
         } catch (err: any) {
-            console.error("AI Analysis Final Failure:", err.message);
-            const simulated = getSimulatedData(city);
-            setChartData([...simulated.data, { ...simulated.prediction, isPrediction: true }]);
-            setAnalysis(simulated.analysis);
-            setRawOutput("// Local Analysis Engine (Emergency Fallback)\n" + JSON.stringify(simulated, null, 2));
+            console.error("Analysis Failure:", err.message);
+            toast.error(err.message || "Analysis Failed");
+            setAnalysis("Analysis Failed: " + (err.message || "Please check connection."));
+            setChartData([]);
         } finally {
             setLoading(false);
         }
@@ -172,11 +132,11 @@ JSON FORMAT (STRICT):
                                 AI Urban Impact Analysis
                             </CardTitle>
                             <CardDescription>
-                                Correlating Traffic Congestion with Air Quality using Gemini AI
+                                Correlating Traffic Congestion with Air Quality using OpenRouter AI
                             </CardDescription>
                         </div>
-                        <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/20">
-                            Gemini 1.5 Powered
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+                            OpenRouter Powered
                         </Badge>
                     </div>
                 </CardHeader>
@@ -319,9 +279,8 @@ JSON FORMAT (STRICT):
                                     </div>
                                 </div>
 
-                                {/* Raw Output Accordion-like */}
                                 <div className="pt-4">
-                                    <p className="text-[10px] font-bold text-slate-600 uppercase mb-2 tracking-widest">Raw Gemini Response</p>
+                                    <p className="text-[10px] font-bold text-slate-600 uppercase mb-2 tracking-widest">Raw AI Response</p>
                                     <pre className="text-[10px] p-4 rounded-xl bg-black/40 text-green-400/70 border border-white/5 overflow-x-auto whitespace-pre-wrap">
                                         {rawOutput}
                                     </pre>

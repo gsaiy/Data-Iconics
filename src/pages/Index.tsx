@@ -33,6 +33,7 @@ import { TrafficPredictorMap } from '@/components/dashboard/TrafficPredictorMap'
 import WeatherView from '@/components/dashboard/WeatherView';
 import ManageAreas from '@/components/dashboard/ManageAreas';
 import UrbanImpactAnalysis from '@/components/dashboard/UrbanImpactAnalysis';
+import AQIPredictor from '@/components/dashboard/AQIPredictor';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
@@ -122,6 +123,7 @@ const Index = () => {
                 {activeSection === 'agriculture' && 'Agricultural Supply'}
                 {activeSection === 'analytics' && 'Analytics & Predictions'}
                 {activeSection === 'scenarios' && 'Scenario Planning'}
+                {activeSection === 'ml-predictor' && 'AQI Machine Learning Predictor'}
               </h2>
               <p className="text-muted-foreground mt-1">
                 {activeSection === 'overview' && 'Comprehensive view of city performance metrics'}
@@ -132,6 +134,7 @@ const Index = () => {
                 {activeSection === 'agriculture' && 'Crop yield, food supply, and price trends'}
                 {activeSection === 'analytics' && 'Predictive analytics and trend analysis'}
                 {activeSection === 'scenarios' && 'What-if analysis and impact projections'}
+                {activeSection === 'ml-predictor' && 'Upload CSV data to train and run AQI prediction models'}
               </p>
             </div>
 
@@ -154,7 +157,10 @@ const Index = () => {
                 {/* Top Row: City Health + Scenario */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2">
-                    <CityHealthGauge data={data.cityHealth} />
+                    <CityHealthGauge
+                      data={data.cityHealth}
+                      isScenarioActive={scenario.rainfall !== 0 || scenario.temperature !== 0 || scenario.populationDensity !== 0 || scenario.energyDemand !== 0}
+                    />
                   </div>
                   <div>
                     <ScenarioPanel
@@ -251,7 +257,13 @@ const Index = () => {
 
             {/* Weather Section */}
             {activeSection === 'weather' && (
-              <WeatherView data={data} locationName={location.name} lat={location.lat} lon={location.lon} />
+              <WeatherView
+                data={data}
+                locationName={location.name}
+                lat={location.lat}
+                lon={location.lon}
+                scenarioRainfall={scenario.rainfall}
+              />
             )}
 
             {/* Urban Section */}
@@ -519,7 +531,10 @@ const Index = () => {
                   onUpdate={updateScenario}
                   onReset={resetScenario}
                 />
-                <CityHealthGauge data={data.cityHealth} />
+                <CityHealthGauge
+                  data={data.cityHealth}
+                  isScenarioActive={scenario.rainfall !== 0 || scenario.temperature !== 0 || scenario.populationDensity !== 0 || scenario.energyDemand !== 0}
+                />
                 <DataChart
                   data={data.timeSeries}
                   title="Projected Urban Impact"
@@ -527,6 +542,11 @@ const Index = () => {
                   className="lg:col-span-2"
                 />
               </div>
+            )}
+
+            {/* ML Predictor Section */}
+            {activeSection === 'ml-predictor' && (
+              <AQIPredictor />
             )}
           </motion.div>
         </div>

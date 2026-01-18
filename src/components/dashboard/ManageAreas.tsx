@@ -8,6 +8,7 @@ import { searchLocations, LocationSearchResult } from '@/services/locationServic
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { backendClient } from '@/services/apiClient';
+import { getDeterministicAnalysis } from "@/services/aqiHistoryService";
 // Firebase
 import { doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -29,107 +30,69 @@ const ManageAreas = ({ currentLocation, onLocationSelect, savedAreas, onSavedAre
     const [isSearching, setIsSearching] = useState(false);
 
     // ----------------------------------------------------------------------
-    // Gemini Fetch Logic
+    // DeepSeek AI Analytics Logic
     // ----------------------------------------------------------------------
-    const fetchGeminiData = async (city: string) => {
-        const prompt = `
-You are an API that outputs ONLY valid JSON.
+    const fetchAIAnalytics = async (city: string) => {
+        try {
+            // STEP 1: Fetch REAL Data Baseline (No more static data!)
+            console.log(`[ManageAreas] Extracting real data for ${city}...`);
+            const results = await searchLocations(city);
+            if (results.length === 0) throw new Error("Could not find coordinates.");
+            const geo = results[0];
 
-ABSOLUTE RULES:
-- Output ONLY raw JSON
-- No markdown
-- No explanations outside JSON
-- No backticks
+            const realHistory = await getDeterministicAnalysis(geo.lat, geo.lon, city);
+            const aqiContext = JSON.stringify(realHistory.data);
 
-ASSUME:
-- Current Year: 2026
-- Past 5 years: 2021–2025
-
+            const prompt = `
+You are an expert Urban Environmental Data Scientist. ANALYZE historical AQI context for ${city}: ${aqiContext}.
 TASK:
-For city ${city}, generate:
-1. AQI yearly averages
-2. Traffic congestion yearly averages
-3. Cause–effect analysis of traffic on AQI
-4. Prediction for 2026
+1. Use these EXACT AQI values for the 'data' array (2021-2025).
+2. Calculate realistic Traffic Congestion % correlating with these specific AQI drops/spikes.
+3. Perform a 5-year time-series regression mentally to predict 2026 values.
+4. Provide a scientific 2-sentence analysis.
 
-JSON FORMAT (STRICT):
-
+OUTPUT ONLY RAW JSON:
 {
-  "data": [
-    { "year": 2021, "aqi": number, "traffic": number },
-    { "year": 2022, "aqi": number, "traffic": number },
-    { "year": 2023, "aqi": number, "traffic": number },
-    { "year": 2024, "aqi": number, "traffic": number },
-    { "year": 2025, "aqi": number, "traffic": number }
-  ],
-  "prediction": {
-    "year": 2026,
-    "aqi": number,
-    "traffic": number
-  },
-  "analysis": "short explanation"
+  "data": [ { "year": 2021, "aqi": number, "traffic": number }, ... ],
+  "prediction": { "year": 2026, "aqi": number, "traffic": number },
+  "analysis": "string"
 }
 `;
 
-        try {
             let aiText = "";
 
-            // Layer 1: Try the backend proxy
+            // Layer 0: OpenRouter (Primary)
             try {
-                console.log(`[AI] Attempting Proxy for ${city}...`);
-                const response = await backendClient.post('/ai-analyze', { prompt });
+                const response = await backendClient.post('/ai/openrouter', { prompt });
                 aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
-            } catch (proxyErr: any) {
-                console.warn("[AI] Proxy unavailable, trying direct...", proxyErr.message);
-
-                // Layer 2: Direct Fallback (Robust Multi-Model Loop)
-                const directModels = [
-                    { name: 'gemini-1.5-flash', version: 'v1beta' },
-                    { name: 'gemini-2.0-flash', version: 'v1beta' }
-                ];
-
-                for (const m of directModels) {
-                    try {
-                        console.log(`[AI] Attempting direct fetch: ${m.name}...`);
-                        const directUrl = `https://generativelanguage.googleapis.com/${m.version}/models/${m.name}:generateContent?key=${getGeminiKey()}`;
-                        const response = await fetch(directUrl, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                            }),
-                        });
-
-                        if (response.ok) {
-                            const data = await response.json();
-                            aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                            if (aiText) break;
-                        } else {
-                            const errData = await response.json().catch(() => ({}));
-                            console.warn(`[AI] Direct ${m.name} failed with status ${response.status}: ${JSON.stringify(errData)}`);
-                        }
-                    } catch (e) {
-                        console.warn(`[AI] Direct ${m.name} failed due to network or parsing error:`, e);
-                    }
+            } catch (err) {
+                console.warn("[AI] OpenRouter failed, trying Gemini Proxy...");
+                // Layer 1: Gemini Proxy
+                try {
+                    const response = await backendClient.post('/ai-analyze', { prompt });
+                    aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+                } catch (err2) {
+                    console.error("[AI] All AI providers failed.");
                 }
-
-                if (!aiText) throw new Error("All direct AI models failed (404/Quota)");
             }
 
-            if (!aiText) throw new Error("AI returned empty analysis");
+            if (!aiText) {
+                // Return Deterministic Fallback if AI fails completely
+                return {
+                    ...realHistory,
+                    data: realHistory.data.map(p => ({ ...p, traffic: Math.round(p.aqi * 0.85) })),
+                    prediction: { ...realHistory.prediction, traffic: Math.round(realHistory.prediction.aqi * 0.85) }
+                };
+            }
 
-            // 🔥 SAFE JSON EXTRACTION
             const start = aiText.indexOf("{");
             const end = aiText.lastIndexOf("}");
-            if (start === -1 || end === -1) {
-                throw new Error("Invalid format received from AI");
-            }
-
+            if (start === -1 || end === -1) throw new Error("Invalid format received from AI");
             return JSON.parse(aiText.slice(start, end + 1));
 
         } catch (err: any) {
-            console.error("Gemini Error:", err);
-            toast.error("AI Analysis skipped (Service high load)");
+            console.error("AI Analysis Error:", err);
+            toast.error("AI Analysis skipped (Using mathematical fallback)");
             return null;
         }
     };
@@ -154,14 +117,14 @@ JSON FORMAT (STRICT):
             // 🔹 CHECK IF ANALYTICS ALREADY EXIST (to save API quota)
             const docSnap = await getDoc(docRef);
             if (docSnap.exists() && docSnap.data().analysis) {
-                console.log(`[Analytics] Analytics for ${docName} already exist. Skipping Gemini.`);
+                console.log(`[Analytics] Analytics for ${docName} already exist. Skipping AI fetch.`);
                 toast.info(`Using existing analytics for ${docName}`);
                 return;
             }
 
-            // 2. FETCH THE DATA FROM GEMINI (ONLY IF MISSING)
+            // 2. FETCH THE DATA (ONLY IF MISSING)
             toast.info("Fetching AI Analytics...");
-            const analyticsData = await fetchGeminiData(docName);
+            const analyticsData = await fetchAIAnalytics(docName);
 
             if (analyticsData) {
                 // 3. THEN UPDATE THE INSERTED DATA

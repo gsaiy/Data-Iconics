@@ -8,7 +8,7 @@ import {
     WeatherPrediction
 } from '@/services/weatherHistoryService';
 
-export const useWeatherHistory = (lat: number, lon: number, cityName: string, currentRainfall: number = 0) => {
+export const useWeatherHistory = (lat: number, lon: number, cityName: string, currentRainfall: number = 0, currentWeather?: any) => {
     const [history, setHistory] = useState<WeatherHistoryPoint[]>([]);
     const [predictions, setPredictions] = useState<WeatherPrediction[]>([]);
     const [floodRisk, setFloodRisk] = useState({ probability: 0, level: 'low' as any, message: '' });
@@ -20,26 +20,32 @@ export const useWeatherHistory = (lat: number, lon: number, cityName: string, cu
             setIsLoading(true);
             setErrorMessage(null);
             try {
-                // 1. Fetch future weather directly from API (as per user request)
-                const futureData = await fetchFutureWeather(lat, lon, cityName);
+                // Parallel fetch for speed
+                const [futureData, firebaseHistory] = await Promise.all([
+                    fetchFutureWeather(lat, lon, cityName),
+                    getHistoryFromFirebase(cityName)
+                ]);
+
                 setPredictions(futureData);
 
-                // 2. Get history for flood risk logic
-                let localHistory = await getHistoryFromFirebase(cityName);
+                let localHistory = firebaseHistory;
                 if (localHistory.length < 3) {
+                    // Try to sync if missing, but don't block predictions
                     localHistory = await syncWeatherHistory(lat, lon, cityName);
                 }
-                setHistory(localHistory);
+                setHistory(localHistory || []);
 
-                // 3. Run flood model
-                if (localHistory.length >= 3) {
-                    const flood = calculateFloodRisk(localHistory, currentRainfall);
-                    setFloodRisk(flood);
-                }
+                // Calculate Risk (Always works now with currentMetrics fallback)
+                const flood = calculateFloodRisk(localHistory || [], currentRainfall, currentWeather);
+                setFloodRisk(flood);
+
             } catch (error: any) {
                 console.error("Error in useWeatherHistory hook:", error);
-                const msg = error.response?.data?.message || error.message || "Failed to fetch weather data";
-                setErrorMessage(msg);
+                setErrorMessage(error.message || "Weather analytics delayed");
+
+                // Still try to calculate risk even if background fetch fails
+                const flood = calculateFloodRisk([], currentRainfall, currentWeather);
+                setFloodRisk(flood);
             } finally {
                 setIsLoading(false);
             }
@@ -48,7 +54,7 @@ export const useWeatherHistory = (lat: number, lon: number, cityName: string, cu
         if (lat && lon && cityName) {
             fetchHistoryAndPredict();
         }
-    }, [lat, lon, cityName, currentRainfall]);
+    }, [lat, lon, cityName, currentRainfall, currentWeather]);
 
     return { history, predictions, floodRisk, isLoading, errorMessage };
 };
