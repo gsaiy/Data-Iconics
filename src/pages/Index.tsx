@@ -33,6 +33,7 @@ import { TrafficPredictorMap } from '@/components/dashboard/TrafficPredictorMap'
 import WeatherView from '@/components/dashboard/WeatherView';
 import ManageAreas from '@/components/dashboard/ManageAreas';
 import UrbanImpactAnalysis from '@/components/dashboard/UrbanImpactAnalysis';
+import HealthAQICorrelation from '@/components/dashboard/HealthAQICorrelation';
 import AQIPredictor from '@/components/dashboard/AQIPredictor';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 import { Badge } from '@/components/ui/badge';
@@ -401,6 +402,12 @@ const Index = () => {
                   title="Public Health Trends"
                   subtitle="Real-time health metrics monitoring"
                   type="health"
+                />
+                <HealthAQICorrelation
+                  lat={location.lat}
+                  lon={location.lon}
+                  cityName={location.name}
+                  currentAQI={data.urban.airQualityIndex}
                 />
               </>
             )}
