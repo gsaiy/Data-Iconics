@@ -124,6 +124,30 @@ app.get('/api/traffic/incidents', async (req, res) => {
         res.status(error.response?.status || 500).json({ error: 'Incidents service unavailable' });
     }
 });
+// Proxy for TomTom Search/Geocoding
+app.get('/api/search/:query', async (req, res) => {
+    try {
+        const { query } = req.params;
+        const key = process.env.VITE_TOMTOM_KEY;
+        const url = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(query)}.json`;
+
+        console.log(`[TomTom Search] Proxying: ${query}`);
+
+        const response = await axios.get(url, {
+            params: {
+                key,
+                limit: 5,
+                typeahead: true
+            },
+            timeout: 5000
+        });
+        res.json(response.data);
+    } catch (error) {
+        console.error('TomTom Search Error:', error.message);
+        res.status(error.response?.status || 500).json({ error: 'Search service unavailable' });
+    }
+});
+
 app.get('/api/status', (req, res) => {
     res.json({ status: 'ok', message: 'UrbanNexus Proxy Server Running' });
 });

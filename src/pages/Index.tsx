@@ -310,6 +310,7 @@ const Index = () => {
                 <TrafficPredictorMap
                   lat={location.lat}
                   lon={location.lon}
+                  weather={data.weather}
                   onLocationChange={handleLocationChange}
                 />
               </>
@@ -501,6 +502,7 @@ const Index = () => {
                   <TrafficPredictorMap
                     lat={location.lat}
                     lon={location.lon}
+                    weather={data.weather}
                     onLocationChange={handleLocationChange}
                   />
                 </div>

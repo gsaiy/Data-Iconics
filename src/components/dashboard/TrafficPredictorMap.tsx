@@ -18,11 +18,12 @@ import { fetchTrafficData } from '@/services/trafficService';
 interface TrafficPredictorMapProps {
     lat: number;
     lon: number;
+    weather?: { description?: string; temp?: number };
     onLocationChange?: (lat: number, lon: number, name?: string) => void;
     className?: string;
 }
 
-const TrafficPredictorMapComponent = ({ lat, lon, onLocationChange, className }: TrafficPredictorMapProps) => {
+const TrafficPredictorMapComponent = ({ lat, lon, weather, onLocationChange, className }: TrafficPredictorMapProps) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -34,15 +35,50 @@ const TrafficPredictorMapComponent = ({ lat, lon, onLocationChange, className }:
 
     useEffect(() => {
         const loadData = async () => {
-            const data = await fetchRealTrafficIncidents(lat, lon);
-            setHotspots(data);
+            // 1. Fetch real incidents (Markers)
+            const incidentData = await fetchRealTrafficIncidents(lat, lon);
+            setHotspots(incidentData);
+
+            // 2. Fetch Live Flow for the specific center (Auto-Selection)
+            // This ensures every location has a unique Analysis immediately
+            try {
+                const flow = await fetchTrafficData(lat, lon);
+                const autoProbe: TrafficHotspot = {
+                    id: 'center-probe-' + lat + '-' + lon,
+                    name: 'City Center Analysis',
+                    lat,
+                    lon,
+                    currentCongestion: flow.congestion,
+                    peakHours: Array.from({ length: 24 }, (_, h) => {
+                        let multiplier = 0.5;
+                        if (h >= 8 && h <= 10) multiplier = 1.4;
+                        if (h >= 17 && h <= 19) multiplier = 1.7;
+
+                        // Salt the curve with coordinates so different cities look different
+                        const salt = Math.abs(lat + lon) % 1;
+                        const variance = 1 + (Math.sin(h * Math.PI / 12 + salt * 10) * 0.1);
+
+                        return { hour: h, level: Math.min(100, Math.round(flow.congestion * multiplier * variance)) };
+                    }),
+                    predictedStatus: flow.congestion > 60 ? 'worsening' : 'stable',
+                    incidentType: 'Live Center Flow',
+                    delay: flow.congestion > 40 ? Math.round(flow.congestion / 6) : 0
+                };
+
+                // Set the default selection for this location
+                setSelectedHotspot(autoProbe);
+            } catch (err) {
+                console.error("Auto center fetch failed", err);
+            }
         };
         loadData();
+    }, [lat, lon]);
 
-        // Update prediction whenever hour or selection changes
+    // Independent prediction effect for responsiveness (factors in simulation hour and weather)
+    useEffect(() => {
         const currentCongestion = selectedHotspot ? selectedHotspot.currentCongestion : 50;
-        setPrediction(predictTrafficModel(currentCongestion, simulatedHour, selectedHotspot?.peakHours));
-    }, [lat, lon, simulatedHour, selectedHotspot]);
+        setPrediction(predictTrafficModel(currentCongestion, simulatedHour, selectedHotspot?.peakHours, weather));
+    }, [simulatedHour, selectedHotspot, weather]);
 
     // Map Initialization
     useEffect(() => {
@@ -88,7 +124,7 @@ const TrafficPredictorMapComponent = ({ lat, lon, onLocationChange, className }:
                 };
 
                 setSelectedHotspot(probeData);
-                setPrediction(predictTrafficModel(probeData.currentCongestion, simulatedHour, probeData.peakHours));
+                setPrediction(predictTrafficModel(probeData.currentCongestion, simulatedHour, probeData.peakHours, weather));
 
                 // Add a visual 'Probe' marker
                 if (markersRef.current) {
@@ -153,7 +189,7 @@ const TrafficPredictorMapComponent = ({ lat, lon, onLocationChange, className }:
 
             marker.on('click', (e) => {
                 setSelectedHotspot(hotspot);
-                setPrediction(predictTrafficModel(hotspot.currentCongestion, simulatedHour, hotspot.peakHours));
+                setPrediction(predictTrafficModel(hotspot.currentCongestion, simulatedHour, hotspot.peakHours, weather));
                 mapInstanceRef.current?.panTo([hotspot.lat, hotspot.lon]);
                 L.DomEvent.stopPropagation(e);
             });

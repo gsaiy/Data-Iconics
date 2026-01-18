@@ -1,4 +1,4 @@
-import { tomtomSearchClient } from './apiClient';
+import { backendClient } from './apiClient';
 
 export interface LocationSearchResult {
     name: string;
@@ -11,12 +11,7 @@ export const searchLocations = async (query: string): Promise<LocationSearchResu
     if (!query || query.length < 3) return [];
 
     try {
-        const response = await tomtomSearchClient.get(`/geocode/${encodeURIComponent(query)}.json`, {
-            params: {
-                limit: 5,
-                typeahead: true
-            }
-        });
+        const response = await backendClient.get(`/search/${encodeURIComponent(query)}`);
 
         return response.data.results.map((result: any) => ({
             name: result.poi?.name || result.address.freeformAddress,
