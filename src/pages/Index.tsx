@@ -141,7 +141,6 @@ const Index = () => {
                 currentLocation={location}
                 onLocationSelect={(loc) => {
                   setLocation(loc);
-                  setActiveSection('overview'); // Go back to overview when location changes
                   toast.success(`Switched to ${loc.name}`);
                 }}
                 savedAreas={savedAreas}
