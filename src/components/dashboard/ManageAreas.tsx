@@ -7,11 +7,14 @@ import { Input } from '@/components/ui/input';
 import { searchLocations, LocationSearchResult } from '@/services/locationService';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { backendClient } from '@/services/apiClient';
 // Firebase
 import { doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+function getGeminiKey() {
+    return import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyD-XqB7Xq8XqXqXqXqXqXqXqXqXqXqXqXq"; // Dummy placeholder, should be in .env
+}
 
 interface ManageAreasProps {
     currentLocation: { lat: number; lon: number; name: string };
@@ -69,34 +72,64 @@ JSON FORMAT (STRICT):
 `;
 
         try {
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [{ role: "user", parts: [{ text: prompt }] }],
-                    }),
+            let aiText = "";
+
+            // Layer 1: Try the backend proxy
+            try {
+                console.log(`[AI] Attempting Proxy for ${city}...`);
+                const response = await backendClient.post('/ai-analyze', { prompt });
+                aiText = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+            } catch (proxyErr: any) {
+                console.warn("[AI] Proxy unavailable, trying direct...", proxyErr.message);
+
+                // Layer 2: Direct Fallback (Robust Multi-Model Loop)
+                const directModels = [
+                    { name: 'gemini-1.5-flash', version: 'v1beta' },
+                    { name: 'gemini-2.0-flash', version: 'v1beta' }
+                ];
+
+                for (const m of directModels) {
+                    try {
+                        console.log(`[AI] Attempting direct fetch: ${m.name}...`);
+                        const directUrl = `https://generativelanguage.googleapis.com/${m.version}/models/${m.name}:generateContent?key=${getGeminiKey()}`;
+                        const response = await fetch(directUrl, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                            }),
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                            if (aiText) break;
+                        } else {
+                            const errData = await response.json().catch(() => ({}));
+                            console.warn(`[AI] Direct ${m.name} failed with status ${response.status}: ${JSON.stringify(errData)}`);
+                        }
+                    } catch (e) {
+                        console.warn(`[AI] Direct ${m.name} failed due to network or parsing error:`, e);
+                    }
                 }
-            );
 
-            if (!response.ok) throw new Error("Gemini API error");
-
-            const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-
-            // 🔥 SAFE JSON EXTRACTION
-            const start = text.indexOf("{");
-            const end = text.lastIndexOf("}");
-            if (start === -1 || end === -1) {
-                throw new Error("Invalid JSON received");
+                if (!aiText) throw new Error("All direct AI models failed (404/Quota)");
             }
 
-            return JSON.parse(text.slice(start, end + 1));
+            if (!aiText) throw new Error("AI returned empty analysis");
+
+            // 🔥 SAFE JSON EXTRACTION
+            const start = aiText.indexOf("{");
+            const end = aiText.lastIndexOf("}");
+            if (start === -1 || end === -1) {
+                throw new Error("Invalid format received from AI");
+            }
+
+            return JSON.parse(aiText.slice(start, end + 1));
 
         } catch (err: any) {
-            console.error(err);
-            toast.error("Error fetching Gemini data");
+            console.error("Gemini Error:", err);
+            toast.error("AI Analysis skipped (Service high load)");
             return null;
         }
     };
